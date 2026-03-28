@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircledIcon, ChevronDownIcon, ChevronUpIcon, InfoCircledIcon } from "@radix-ui/react-icons";
+import Link from "next/link";
+import {
+  CheckCircledIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  InfoCircledIcon
+} from "@radix-ui/react-icons";
 import { Badge, Button, Callout, Card, Checkbox, Flex, Grid, Heading, Select, Text } from "@radix-ui/themes";
 import { BUILTIN_LANGUAGES } from "@/lib/languages";
 import { useI18n } from "@/lib/use-i18n";
 import { DEFAULT_SETTINGS, readSettings, writeSettings } from "@/lib/settings-storage";
 import { AppSettings } from "@/lib/types";
+import packageJson from "@/package.json";
 
 const BUILTIN_CODE_SET = new Set(BUILTIN_LANGUAGES.map((item) => item.code));
 
-type MessageState = "" | "saved";
+type MessageState = "" | "saved" | "copied";
+const CONTACT_EMAIL = "contact@parlerai.app";
+const APP_VERSION = packageJson.version;
 
 function normalizeCode(value: string): string {
   return value.trim().toLowerCase();
@@ -81,6 +91,21 @@ export default function SettingsPage() {
     const next = [...targetLanguages];
     [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
     updateAndPersist(next);
+  };
+
+  const copyContactEmail = async () => {
+    try {
+      await navigator.clipboard.writeText(CONTACT_EMAIL);
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = CONTACT_EMAIL;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
+    setMessage("copied");
+    window.setTimeout(() => setMessage(""), 1200);
   };
 
   return (
@@ -190,9 +215,62 @@ export default function SettingsPage() {
       {message ? (
         <Callout.Root color="gray" variant="soft">
           <Callout.Icon>{message === "saved" ? <CheckCircledIcon /> : <InfoCircledIcon />}</Callout.Icon>
-          <Callout.Text>{message === "saved" ? t("settings.saved") : ""}</Callout.Text>
+          <Callout.Text>{message === "saved" ? t("settings.saved") : t("settings.contactCopied")}</Callout.Text>
         </Callout.Root>
       ) : null}
+
+      <Card>
+        <button
+          type="button"
+          onClick={copyContactEmail}
+          aria-label={t("settings.contact")}
+          style={{
+            all: "unset",
+            width: "100%",
+            cursor: "pointer"
+          }}
+        >
+          <Flex align="center" justify="between" gap="3">
+            <Text size="3">{t("settings.contact")}</Text>
+            <Flex align="center" gap="1">
+              <Text size="2" color="gray">
+                {CONTACT_EMAIL}
+              </Text> 
+            </Flex>
+          </Flex>
+        </button>
+      </Card>
+
+      <Card>
+        <Flex direction="column" gap="3">
+          <Text asChild size="3">
+            <Link href="/privacy-policy">
+              <Flex align="center" justify="between" gap="3">
+                <Text size="3">{t("settings.privacyPolicy")}</Text>
+                <Text size="2" color="gray" aria-hidden>
+                  <ChevronRightIcon />
+                </Text>
+              </Flex>
+            </Link>
+          </Text>
+          <Text asChild size="3">
+            <Link href="/user-agreement">
+              <Flex align="center" justify="between" gap="3">
+                <Text size="3">{t("settings.userAgreement")}</Text>
+                <Text size="2" color="gray" aria-hidden>
+                  <ChevronRightIcon />
+                </Text>
+              </Flex>
+            </Link>
+          </Text>
+          <Flex align="center" justify="between" gap="3">
+            <Text size="3">{t("settings.version")}</Text>
+            <Text size="2" color="gray">
+              {APP_VERSION}
+            </Text>
+          </Flex>
+        </Flex>
+      </Card>
     </Flex>
   );
 }

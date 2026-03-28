@@ -10,14 +10,14 @@
   "lang": "en",
   "icons": [
     {
-      "src": "/icons/icon.svg",
+      "src": "/icons/icon.png",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/png"
     },
     {
-      "src": "/icons/maskable-icon.svg",
+      "src": "/icons/maskable-icon.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "maskable any"
     }
   ]

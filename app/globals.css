@@ -43,6 +43,26 @@ a {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.gdpr-banner-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(74px + env(safe-area-inset-bottom));
+  z-index: 70;
+  padding: 0 12px;
+}
+
+.gdpr-banner-card {
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.gdpr-legal-links a {
+  color: #111111;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .app-bottom-nav-inner {
   max-width: 680px;
   margin: 0 auto;

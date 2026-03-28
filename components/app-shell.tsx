@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { Box, Container, Theme } from "@radix-ui/themes";
 import { BottomTabbar } from "@/components/bottom-tabbar";
+import { GdprConsentBanner } from "@/components/gdpr-consent-banner";
 import { useI18n } from "@/lib/use-i18n";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Box>
           </Box>
         </Container>
+        <GdprConsentBanner />
         <BottomTabbar />
       </div>
     </Theme>
