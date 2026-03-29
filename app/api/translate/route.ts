@@ -94,7 +94,7 @@ function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguage
 }
 
 export async function POST(request: Request) {
-  const rateLimit = checkIpRateLimit(request);
+  const rateLimit = await checkIpRateLimit(request);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       {

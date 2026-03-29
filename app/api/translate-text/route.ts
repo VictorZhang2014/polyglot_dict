@@ -85,7 +85,7 @@ function makeCacheKey(sourceText: string, sourceLanguage: string, targetLanguage
 
 export async function POST(request: Request) {
   const startedAt = performance.now();
-  const rateLimit = checkIpRateLimit(request);
+  const rateLimit = await checkIpRateLimit(request);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       {
