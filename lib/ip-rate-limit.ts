@@ -6,6 +6,14 @@ const DAILY_LIMIT = 50;
 const TABLE_NAME = process.env.RATE_LIMIT_TABLE_NAME?.trim() || "parlerai_rate_limit";
 const TTL_GRACE_DAYS = 2;
 const FAIL_OPEN = (process.env.RATE_LIMIT_FAIL_OPEN ?? "false").trim().toLowerCase() === "true";
+const RATE_LIMIT_BACKEND = (
+  process.env.RATE_LIMIT_BACKEND ??
+  (process.env.NODE_ENV === "production" ? "dynamodb" : "memory")
+)
+  .trim()
+  .toLowerCase();
+const CLEANUP_EVERY = 200;
+const STALE_ENTRY_MS = 3 * 24 * 60 * 60 * 1000;
 
 type IpRateLimitItem = {
   pk: string;
@@ -14,6 +22,18 @@ type IpRateLimitItem = {
   lastRequestAt: number;
   updatedAt: number;
   expiresAt: number;
+};
+
+type MemoryRateLimitEntry = {
+  dayKey: string;
+  count: number;
+  lastRequestAt: number;
+  updatedAt: number;
+};
+
+type MemoryRateLimitStore = {
+  byIp: Map<string, MemoryRateLimitEntry>;
+  checks: number;
 };
 
 type AllowedResult = {
@@ -31,6 +51,7 @@ type BlockedResult = {
 export type IpRateLimitResult = AllowedResult | BlockedResult;
 
 const GLOBAL_CLIENT_KEY = "__polyglot_dynamodb_doc_client__";
+const GLOBAL_MEMORY_STORE_KEY = "__polyglot_ip_rate_limit_memory_store__";
 
 function getClient(): DynamoDBDocumentClient {
   const root = globalThis as typeof globalThis & { [GLOBAL_CLIENT_KEY]?: DynamoDBDocumentClient };
@@ -44,6 +65,18 @@ function getClient(): DynamoDBDocumentClient {
   }
 
   return root[GLOBAL_CLIENT_KEY] as DynamoDBDocumentClient;
+}
+
+function getMemoryStore(): MemoryRateLimitStore {
+  const root = globalThis as typeof globalThis & { [GLOBAL_MEMORY_STORE_KEY]?: MemoryRateLimitStore };
+  if (!root[GLOBAL_MEMORY_STORE_KEY]) {
+    root[GLOBAL_MEMORY_STORE_KEY] = {
+      byIp: new Map<string, MemoryRateLimitEntry>(),
+      checks: 0
+    };
+  }
+
+  return root[GLOBAL_MEMORY_STORE_KEY] as MemoryRateLimitStore;
 }
 
 function toDayKey(now: number): string {
@@ -71,6 +104,14 @@ function toEpochSeconds(now: number): number {
 
 function ttlWithGrace(now: number): number {
   return toEpochSeconds(now + TTL_GRACE_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function cleanupMemoryStore(store: MemoryRateLimitStore, now: number): void {
+  for (const [ip, entry] of store.byIp) {
+    if (now - entry.updatedAt > STALE_ENTRY_MS) {
+      store.byIp.delete(ip);
+    }
+  }
 }
 
 function firstNonEmpty(...values: Array<string | null>): string {
@@ -160,7 +201,61 @@ function unavailableResult(): BlockedResult {
   };
 }
 
+function checkIpRateLimitInMemory(request: Request): IpRateLimitResult {
+  const now = Date.now();
+  const store = getMemoryStore();
+  store.checks += 1;
+
+  if (store.checks % CLEANUP_EVERY === 0) {
+    cleanupMemoryStore(store, now);
+  }
+
+  const ip = getClientIp(request);
+  const dayKey = toDayKey(now);
+  const existing = store.byIp.get(ip);
+
+  let entry: MemoryRateLimitEntry;
+  if (!existing || existing.dayKey !== dayKey) {
+    entry = {
+      dayKey,
+      count: 0,
+      lastRequestAt: 0,
+      updatedAt: now
+    };
+  } else {
+    entry = existing;
+  }
+
+  const elapsed = now - entry.lastRequestAt;
+  if (entry.lastRequestAt > 0 && elapsed < MIN_INTERVAL_MS) {
+    entry.updatedAt = now;
+    store.byIp.set(ip, entry);
+    return intervalResult(elapsed);
+  }
+
+  if (entry.count >= DAILY_LIMIT) {
+    entry.updatedAt = now;
+    store.byIp.set(ip, entry);
+    return dailyResult(now);
+  }
+
+  entry.count += 1;
+  entry.lastRequestAt = now;
+  entry.updatedAt = now;
+  store.byIp.set(ip, entry);
+
+  return { allowed: true };
+}
+
+function useMemoryBackend(): boolean {
+  return RATE_LIMIT_BACKEND === "memory";
+}
+
 export async function checkIpRateLimit(request: Request): Promise<IpRateLimitResult> {
+  if (useMemoryBackend()) {
+    return checkIpRateLimitInMemory(request);
+  }
+
   const now = Date.now();
   const ip = getClientIp(request);
   const dayKey = toDayKey(now);
