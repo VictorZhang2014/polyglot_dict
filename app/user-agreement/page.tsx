@@ -1,10 +1,45 @@
 "use client";
 
-import { Card, Flex, Heading, Separator, Text } from "@radix-ui/themes";
+import { useEffect, useState } from "react";
+import { Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { useI18n } from "@/lib/use-i18n";
+
+const AGREEMENT_HTML_PATH = "/legal/user-agreement.html";
 
 export default function UserAgreementPage() {
   const { t } = useI18n();
+  const [content, setContent] = useState("");
+  const [loadState, setLoadState] = useState<"loading" | "error" | "loaded">("loading");
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const response = await fetch(AGREEMENT_HTML_PATH, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Failed to load agreement html");
+        }
+        const html = await response.text();
+        if (!active) {
+          return;
+        }
+        setContent(html);
+        setLoadState("loaded");
+      } catch {
+        if (!active) {
+          return;
+        }
+        setLoadState("error");
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Flex direction="column" gap="4">
@@ -18,32 +53,19 @@ export default function UserAgreementPage() {
       </Card>
 
       <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">1. Service scope</Heading>
+        {loadState === "error" ? (
           <Text size="2" color="gray">
-            ParlerAI provides dictionary lookup and short text translation features for personal and lawful use.
+            Failed to load User Agreement content.
           </Text>
-          <Separator size="4" />
-
-          <Heading size="4">2. Acceptable use</Heading>
+        ) : null}
+        {loadState === "loading" ? (
           <Text size="2" color="gray">
-            You agree not to abuse the service, bypass rate limits, attempt unauthorized access, or use the app for
-            illegal content or activities.
+            Loading User Agreement...
           </Text>
-          <Separator size="4" />
-
-          <Heading size="4">3. Availability and changes</Heading>
-          <Text size="2" color="gray">
-            We may update, suspend, or discontinue parts of the service at any time to improve reliability, security,
-            and quality.
-          </Text>
-          <Separator size="4" />
-
-          <Heading size="4">4. Disclaimer</Heading>
-          <Text size="2" color="gray">
-            Translation and lexical results may contain errors. You should verify critical information independently.
-          </Text>
-        </Flex>
+        ) : null}
+        {loadState === "loaded" ? (
+          <article className="legal-html" dangerouslySetInnerHTML={{ __html: content }} />
+        ) : null}
       </Card>
     </Flex>
   );

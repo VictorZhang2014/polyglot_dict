@@ -63,6 +63,31 @@ a {
   text-underline-offset: 2px;
 }
 
+.legal-html {
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.legal-html h2 {
+  color: #111111;
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.legal-html p {
+  margin: 0 0 10px;
+}
+
+.legal-html ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.legal-html li {
+  margin: 0 0 6px;
+}
+
 .app-bottom-nav-inner {
   max-width: 680px;
   margin: 0 auto;

@@ -74,7 +74,7 @@ const EN_MESSAGES = {
   "gdpr.privacyPolicy": "Privacy Policy",
   "gdpr.accept": "Accept",
   "gdpr.reject": "Reject",
-  "legal.lastUpdated": "Last updated: March 28, 2026",
+  "legal.lastUpdated": "Last updated: March 29, 2026",
 
   "pos.noun": "Noun",
   "pos.verb": "Verb",
@@ -175,7 +175,7 @@ const ZH_MESSAGES: MessageMap = {
   "gdpr.privacyPolicy": "隐私政策",
   "gdpr.accept": "同意",
   "gdpr.reject": "拒绝",
-  "legal.lastUpdated": "最后更新：2026年3月28日",
+  "legal.lastUpdated": "最后更新：2026年3月29日",
 
   "pos.noun": "名词",
   "pos.verb": "动词",

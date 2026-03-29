@@ -1,10 +1,45 @@
 "use client";
 
-import { Card, Flex, Heading, Separator, Text } from "@radix-ui/themes";
+import { useEffect, useState } from "react";
+import { Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { useI18n } from "@/lib/use-i18n";
+
+const PRIVACY_HTML_PATH = "/legal/privacy-policy.html";
 
 export default function PrivacyPolicyPage() {
   const { t } = useI18n();
+  const [content, setContent] = useState("");
+  const [loadState, setLoadState] = useState<"loading" | "error" | "loaded">("loading");
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const response = await fetch(PRIVACY_HTML_PATH, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Failed to load privacy policy html");
+        }
+        const html = await response.text();
+        if (!active) {
+          return;
+        }
+        setContent(html);
+        setLoadState("loaded");
+      } catch {
+        if (!active) {
+          return;
+        }
+        setLoadState("error");
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Flex direction="column" gap="4">
@@ -18,31 +53,17 @@ export default function PrivacyPolicyPage() {
       </Card>
 
       <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">1. Data we process</Heading>
+        {loadState === "error" ? (
           <Text size="2" color="gray">
-            We process your query text and language selections to generate dictionary and translation results.
+            Failed to load Privacy Policy content.
           </Text>
-          <Separator size="4" />
-
-          <Heading size="4">2. Local storage</Heading>
+        ) : null}
+        {loadState === "loading" ? (
           <Text size="2" color="gray">
-            Query history, app settings, and GDPR consent choice are stored locally in your browser on your device.
+            Loading Privacy Policy...
           </Text>
-          <Separator size="4" />
-
-          <Heading size="4">3. Analytics cookies</Heading>
-          <Text size="2" color="gray">
-            Analytics runs only after you explicitly accept in the GDPR prompt. If you reject, analytics scripts are
-            not loaded.
-          </Text>
-          <Separator size="4" />
-
-          <Heading size="4">4. Contact</Heading>
-          <Text size="2" color="gray">
-            For privacy questions, contact us at contact@parlerai.app.
-          </Text>
-        </Flex>
+        ) : null}
+        {loadState === "loaded" ? <article className="legal-html" dangerouslySetInnerHTML={{ __html: content }} /> : null}
       </Card>
     </Flex>
   );
