@@ -6,6 +6,7 @@ const DAILY_LIMIT = 50;
 const TABLE_NAME = process.env.RATE_LIMIT_TABLE_NAME?.trim() || "parlerai_rate_limit";
 const TTL_GRACE_DAYS = 2;
 const FAIL_OPEN = (process.env.RATE_LIMIT_FAIL_OPEN ?? "false").trim().toLowerCase() === "true";
+const DDB_REGION = process.env.RATE_LIMIT_AWS_REGION?.trim() || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
 const RATE_LIMIT_BACKEND = (
   process.env.RATE_LIMIT_BACKEND ??
   (process.env.NODE_ENV === "production" ? "dynamodb" : "memory")
@@ -56,7 +57,9 @@ const GLOBAL_MEMORY_STORE_KEY = "__polyglot_ip_rate_limit_memory_store__";
 function getClient(): DynamoDBDocumentClient {
   const root = globalThis as typeof globalThis & { [GLOBAL_CLIENT_KEY]?: DynamoDBDocumentClient };
   if (!root[GLOBAL_CLIENT_KEY]) {
-    const base = new DynamoDBClient({});
+    const base = new DynamoDBClient({
+      region: DDB_REGION
+    });
     root[GLOBAL_CLIENT_KEY] = DynamoDBDocumentClient.from(base, {
       marshallOptions: {
         removeUndefinedValues: true
@@ -201,6 +204,37 @@ function unavailableResult(): BlockedResult {
   };
 }
 
+function logRateLimitDdbError(stage: "update" | "get", error: unknown): void {
+  const asRecord = (error && typeof error === "object" ? error : null) as
+    | {
+        name?: unknown;
+        message?: unknown;
+        code?: unknown;
+        $metadata?: { httpStatusCode?: unknown; requestId?: unknown };
+      }
+    | null;
+
+  const name = typeof asRecord?.name === "string" ? asRecord.name : "UnknownError";
+  const message = typeof asRecord?.message === "string" ? asRecord.message : String(error);
+  const code = typeof asRecord?.code === "string" ? asRecord.code : undefined;
+  const status =
+    typeof asRecord?.$metadata?.httpStatusCode === "number" ? asRecord.$metadata.httpStatusCode : undefined;
+  const requestId = typeof asRecord?.$metadata?.requestId === "string" ? asRecord.$metadata.requestId : undefined;
+
+  console.error("[rate-limit] dynamodb failure", {
+    stage,
+    backend: RATE_LIMIT_BACKEND,
+    tableName: TABLE_NAME,
+    region: DDB_REGION || "unset",
+    failOpen: FAIL_OPEN,
+    name,
+    code,
+    status,
+    requestId,
+    message
+  });
+}
+
 function checkIpRateLimitInMemory(request: Request): IpRateLimitResult {
   const now = Date.now();
   const store = getMemoryStore();
@@ -293,7 +327,7 @@ export async function checkIpRateLimit(request: Request): Promise<IpRateLimitRes
   } catch (error) {
     const name = typeof error === "object" && error && "name" in error ? String(error.name) : "";
     if (name !== "ConditionalCheckFailedException") {
-      console.error("[rate-limit] dynamodb update failed", error);
+      logRateLimitDdbError("update", error);
       return FAIL_OPEN ? { allowed: true } : unavailableResult();
     }
   }
@@ -323,7 +357,7 @@ export async function checkIpRateLimit(request: Request): Promise<IpRateLimitRes
 
     return intervalResult(0);
   } catch (error) {
-    console.error("[rate-limit] dynamodb get failed after conditional failure", error);
+    logRateLimitDdbError("get", error);
     return FAIL_OPEN ? { allowed: true } : unavailableResult();
   }
 }
