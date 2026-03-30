@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -26,6 +26,7 @@ type CheckError = {
 type ServiceCheck = {
   ok: boolean;
   latencyMs: number;
+  details?: Record<string, boolean>;
   error?: CheckError;
 };
 
@@ -49,10 +50,33 @@ function serializeError(error: unknown): CheckError {
 
 async function checkDynamoDbConnectivity(): Promise<ServiceCheck> {
   const startedAt = performance.now();
+  const details: Record<string, boolean> = {
+    updateItem: false,
+    getItem: false
+  };
+
   try {
     const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: RATE_LIMIT_AWS_REGION }), {
       marshallOptions: { removeUndefinedValues: true }
     });
+
+    const now = Date.now();
+    await client.send(
+      new UpdateCommand({
+        TableName: RATE_LIMIT_TABLE_NAME,
+        Key: { pk: "__healthcheck__" },
+        UpdateExpression: "SET #updatedAt = :now, #expiresAt = :expiresAt",
+        ExpressionAttributeNames: {
+          "#updatedAt": "updatedAt",
+          "#expiresAt": "expiresAt"
+        },
+        ExpressionAttributeValues: {
+          ":now": now,
+          ":expiresAt": Math.floor((now + 60 * 60 * 1000) / 1000)
+        }
+      })
+    );
+    details.updateItem = true;
 
     await client.send(
       new GetCommand({
@@ -61,15 +85,18 @@ async function checkDynamoDbConnectivity(): Promise<ServiceCheck> {
         ConsistentRead: false
       })
     );
+    details.getItem = true;
 
     return {
       ok: true,
-      latencyMs: Number((performance.now() - startedAt).toFixed(2))
+      latencyMs: Number((performance.now() - startedAt).toFixed(2)),
+      details
     };
   } catch (error) {
     return {
       ok: false,
       latencyMs: Number((performance.now() - startedAt).toFixed(2)),
+      details,
       error: serializeError(error)
     };
   }
