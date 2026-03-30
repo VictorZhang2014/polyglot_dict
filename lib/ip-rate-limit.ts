@@ -51,23 +51,18 @@ type BlockedResult = {
 
 export type IpRateLimitResult = AllowedResult | BlockedResult;
 
-const GLOBAL_CLIENT_KEY = "__polyglot_dynamodb_doc_client__";
 const GLOBAL_MEMORY_STORE_KEY = "__polyglot_ip_rate_limit_memory_store__";
 
-function getClient(): DynamoDBDocumentClient {
-  const root = globalThis as typeof globalThis & { [GLOBAL_CLIENT_KEY]?: DynamoDBDocumentClient };
-  if (!root[GLOBAL_CLIENT_KEY]) {
-    const base = new DynamoDBClient({
-      region: DDB_REGION
-    });
-    root[GLOBAL_CLIENT_KEY] = DynamoDBDocumentClient.from(base, {
-      marshallOptions: {
-        removeUndefinedValues: true
-      }
-    });
-  }
+function createClient(): DynamoDBDocumentClient {
+  const base = new DynamoDBClient({
+    region: DDB_REGION
+  });
 
-  return root[GLOBAL_CLIENT_KEY] as DynamoDBDocumentClient;
+  return DynamoDBDocumentClient.from(base, {
+    marshallOptions: {
+      removeUndefinedValues: true
+    }
+  });
 }
 
 function getMemoryStore(): MemoryRateLimitStore {
@@ -235,6 +230,15 @@ function logRateLimitDdbError(stage: "update" | "get", error: unknown): void {
   });
 }
 
+function isCredentialsProviderError(error: unknown): boolean {
+  const asRecord = error && typeof error === "object" ? (error as { name?: unknown }) : null;
+  return typeof asRecord?.name === "string" && asRecord.name === "CredentialsProviderError";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function checkIpRateLimitInMemory(request: Request): IpRateLimitResult {
   const now = Date.now();
   const store = getMemoryStore();
@@ -294,45 +298,61 @@ export async function checkIpRateLimit(request: Request): Promise<IpRateLimitRes
   const ip = getClientIp(request);
   const dayKey = toDayKey(now);
   const pk = makePk(ip, dayKey);
-  const client = getClient();
 
-  try {
-    await client.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { pk },
-        UpdateExpression:
-          "SET #dayKey = :dayKey, #lastRequestAt = :now, #updatedAt = :now, #expiresAt = :expiresAt ADD #count :one",
-        ConditionExpression:
-          "(attribute_not_exists(#lastRequestAt) OR #lastRequestAt <= :intervalCutoff) AND (attribute_not_exists(#count) OR #count < :dailyLimit)",
-        ExpressionAttributeNames: {
-          "#dayKey": "dayKey",
-          "#count": "count",
-          "#lastRequestAt": "lastRequestAt",
-          "#updatedAt": "updatedAt",
-          "#expiresAt": "expiresAt"
-        },
-        ExpressionAttributeValues: {
-          ":dayKey": dayKey,
-          ":now": now,
-          ":intervalCutoff": now - MIN_INTERVAL_MS,
-          ":dailyLimit": DAILY_LIMIT,
-          ":one": 1,
-          ":expiresAt": ttlWithGrace(now)
-        }
-      })
-    );
+  const updateCommand = new UpdateCommand({
+    TableName: TABLE_NAME,
+    Key: { pk },
+    UpdateExpression:
+      "SET #dayKey = :dayKey, #lastRequestAt = :now, #updatedAt = :now, #expiresAt = :expiresAt ADD #count :one",
+    ConditionExpression:
+      "(attribute_not_exists(#lastRequestAt) OR #lastRequestAt <= :intervalCutoff) AND (attribute_not_exists(#count) OR #count < :dailyLimit)",
+    ExpressionAttributeNames: {
+      "#dayKey": "dayKey",
+      "#count": "count",
+      "#lastRequestAt": "lastRequestAt",
+      "#updatedAt": "updatedAt",
+      "#expiresAt": "expiresAt"
+    },
+    ExpressionAttributeValues: {
+      ":dayKey": dayKey,
+      ":now": now,
+      ":intervalCutoff": now - MIN_INTERVAL_MS,
+      ":dailyLimit": DAILY_LIMIT,
+      ":one": 1,
+      ":expiresAt": ttlWithGrace(now)
+    }
+  });
 
-    return { allowed: true };
-  } catch (error) {
-    const name = typeof error === "object" && error && "name" in error ? String(error.name) : "";
-    if (name !== "ConditionalCheckFailedException") {
+  let conditionalFailed = false;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const client = createClient();
+      await client.send(updateCommand);
+      return { allowed: true };
+    } catch (error) {
+      const name = typeof error === "object" && error && "name" in error ? String(error.name) : "";
+      if (name === "ConditionalCheckFailedException") {
+        conditionalFailed = true;
+        break;
+      }
+
+      if (isCredentialsProviderError(error) && attempt < 2) {
+        await sleep(80);
+        continue;
+      }
+
       logRateLimitDdbError("update", error);
       return FAIL_OPEN ? { allowed: true } : unavailableResult();
     }
   }
 
+  if (!conditionalFailed) {
+    return FAIL_OPEN ? { allowed: true } : unavailableResult();
+  }
+
   try {
+    const client = createClient();
     const read = await client.send(
       new GetCommand({
         TableName: TABLE_NAME,
