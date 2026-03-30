@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { translateWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
-import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -94,38 +93,6 @@ function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguage
 }
 
 export async function POST(request: Request) {
-  try {
-    const rateLimit = await checkIpRateLimit(request);
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: toEnglishApiErrorMessage(rateLimit.message),
-          code: rateLimit.code
-        },
-        {
-          status: rateLimit.status,
-          headers: {
-            "Retry-After": String(rateLimit.retryAfterSeconds)
-          }
-        }
-      );
-    }
-  } catch (error) {
-    console.error("[translate:rate-limit] unexpected failure", error);
-    return NextResponse.json(
-      {
-        error: "Rate limiter is temporarily unavailable. Please retry in a few seconds.",
-        code: "IP_RATE_LIMIT_UNAVAILABLE"
-      },
-      {
-        status: 503,
-        headers: {
-          "Retry-After": "3"
-        }
-      }
-    );
-  }
-
   try {
     const raw = (await request.json()) as TranslateRequest;
     const payload = parseBody(raw);
