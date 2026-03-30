@@ -1,5 +1,5 @@
 import { BUILTIN_LANGUAGES, DEFAULT_TARGET_LANGUAGES } from "@/lib/languages";
-import { AppSettings, LanguageOption } from "@/lib/types";
+import { AppSettings, LanguageOption, ThemeMode } from "@/lib/types";
 
 const SETTINGS_KEY = "polyglot_dict_settings_v1";
 export const SETTINGS_CHANGED_EVENT = "polyglot_dict_settings_changed";
@@ -8,7 +8,8 @@ const BUILTIN_CODE_SET = new Set(BUILTIN_LANGUAGES.map((item) => item.code));
 export const DEFAULT_SETTINGS: AppSettings = {
   targetLanguages: DEFAULT_TARGET_LANGUAGES,
   customLanguages: [],
-  uiLanguage: DEFAULT_TARGET_LANGUAGES[0] ?? "en"
+  uiLanguage: DEFAULT_TARGET_LANGUAGES[0] ?? "en",
+  themeMode: "system"
 };
 
 function normalizeCode(code: string): string {
@@ -37,6 +38,19 @@ function normalizeLanguages(items: LanguageOption[]): LanguageOption[] {
   return Array.from(dedup.values());
 }
 
+function normalizeThemeMode(value: unknown): ThemeMode {
+  if (typeof value !== "string") {
+    return DEFAULT_SETTINGS.themeMode;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "light" || normalized === "dark" || normalized === "system") {
+    return normalized;
+  }
+
+  return DEFAULT_SETTINGS.themeMode;
+}
+
 function sanitize(raw: unknown): AppSettings {
   if (!raw || typeof raw !== "object") {
     return DEFAULT_SETTINGS;
@@ -54,11 +68,13 @@ function sanitize(raw: unknown): AppSettings {
   const normalizedTargets = targetLanguages.length > 0 ? targetLanguages : DEFAULT_TARGET_LANGUAGES;
   const candidateUiLanguage = typeof value.uiLanguage === "string" ? normalizeCode(value.uiLanguage) : "";
   const uiLanguage = BUILTIN_CODE_SET.has(candidateUiLanguage) ? candidateUiLanguage : DEFAULT_SETTINGS.uiLanguage;
+  const themeMode = normalizeThemeMode(value.themeMode);
 
   return {
     targetLanguages: normalizedTargets,
     customLanguages,
-    uiLanguage
+    uiLanguage,
+    themeMode
   };
 }
 

@@ -13,7 +13,7 @@ import { Badge, Button, Callout, Card, Checkbox, Flex, Grid, Heading, Select, Te
 import { BUILTIN_LANGUAGES } from "@/lib/languages";
 import { useI18n } from "@/lib/use-i18n";
 import { DEFAULT_SETTINGS, readSettings, writeSettings } from "@/lib/settings-storage";
-import { AppSettings } from "@/lib/types";
+import { AppSettings, ThemeMode } from "@/lib/types";
 import packageJson from "@/package.json";
 
 const BUILTIN_CODE_SET = new Set(BUILTIN_LANGUAGES.map((item) => item.code));
@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const { t } = useI18n();
   const [targetLanguages, setTargetLanguages] = useState(DEFAULT_SETTINGS.targetLanguages);
   const [uiLanguage, setUiLanguage] = useState(DEFAULT_SETTINGS.uiLanguage);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(DEFAULT_SETTINGS.themeMode);
   const [message, setMessage] = useState<MessageState>("");
 
   useEffect(() => {
@@ -45,24 +46,29 @@ export default function SettingsPage() {
     const normalized = sanitizeTargets(settings.targetLanguages);
     const finalTargets = normalized.length > 0 ? normalized : DEFAULT_SETTINGS.targetLanguages;
     const finalUi = BUILTIN_CODE_SET.has(settings.uiLanguage) ? settings.uiLanguage : DEFAULT_SETTINGS.uiLanguage;
+    const finalTheme = settings.themeMode ?? DEFAULT_SETTINGS.themeMode;
     setTargetLanguages(finalTargets);
     setUiLanguage(finalUi);
+    setThemeMode(finalTheme);
   }, []);
 
-  const updateAndPersist = (nextTargets: string[], nextUiLanguage?: string) => {
+  const updateAndPersist = (nextTargets: string[], nextUiLanguage?: string, nextThemeMode?: ThemeMode) => {
     const normalized = sanitizeTargets(nextTargets);
     const finalTargets = normalized.length > 0 ? normalized : DEFAULT_SETTINGS.targetLanguages;
     const candidateUi = normalizeCode(nextUiLanguage ?? uiLanguage);
     const finalUi = BUILTIN_CODE_SET.has(candidateUi) ? candidateUi : DEFAULT_SETTINGS.uiLanguage;
+    const finalTheme = nextThemeMode ?? themeMode;
 
     const saved = writeSettings({
       targetLanguages: finalTargets,
       customLanguages: [],
-      uiLanguage: finalUi
+      uiLanguage: finalUi,
+      themeMode: finalTheme
     } satisfies AppSettings);
 
     setTargetLanguages(saved.targetLanguages);
     setUiLanguage(saved.uiLanguage);
+    setThemeMode(saved.themeMode);
     setMessage("saved");
     window.setTimeout(() => setMessage(""), 1200);
   };
@@ -140,6 +146,24 @@ export default function SettingsPage() {
               ))}
             </Select.Content>
           </Select.Root>
+
+          <Heading size="4">{t("settings.themeMode")}</Heading>
+          <Text size="2" color="gray">
+            {t("settings.themeModeHint")}
+          </Text>
+          <Select.Root
+            value={themeMode}
+            onValueChange={(value) => {
+              updateAndPersist(targetLanguages, uiLanguage, value as ThemeMode);
+            }}
+          >
+            <Select.Trigger />
+            <Select.Content position="popper">
+              <Select.Item value="system">{t("settings.themeOptionSystem")}</Select.Item>
+              <Select.Item value="light">{t("settings.themeOptionLight")}</Select.Item>
+              <Select.Item value="dark">{t("settings.themeOptionDark")}</Select.Item>
+            </Select.Content>
+          </Select.Root>
         </Flex>
       </Card>
 
@@ -152,6 +176,7 @@ export default function SettingsPage() {
                 <Flex align="center" gap="2">
                   <Checkbox
                     checked={targetLanguages.includes(item.code)}
+                    color={targetLanguages.includes(item.code) ? "grass" : "gray"}
                     onCheckedChange={(checked) => toggleLanguage(item.code, checked === true)}
                   />
                   <Text size="2">

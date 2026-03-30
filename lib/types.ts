@@ -3,6 +3,8 @@ export type LanguageOption = {
   name: string;
 };
 
+export type ThemeMode = "system" | "light" | "dark";
+
 export type TranslationItem = {
   targetLanguage: string;
   directTranslation: string;
@@ -54,4 +56,5 @@ export type AppSettings = {
   targetLanguages: string[];
   customLanguages: LanguageOption[];
   uiLanguage: string;
+  themeMode: ThemeMode;
 };

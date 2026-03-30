@@ -16,14 +16,80 @@ body {
     #f7f7f7;
 }
 
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111113;
+  }
+}
+
+:is(html.dark, html.dark-theme) body {
+  background: #111113;
+}
+
 a {
   color: inherit;
   text-decoration: none;
 }
 
+.radix-themes {
+  --app-bg: #f3f6ff;
+  --app-nav-border: rgba(0, 0, 0, 0.1);
+  --app-nav-bg: rgba(255, 255, 255, 0.92);
+  --app-link-strong: #111111;
+  --app-legal-text: #374151;
+  --app-nav-item: #525252;
+  --app-nav-item-active: #000000;
+  --app-input-text: #111111;
+  --app-input-placeholder: #9ca3af;
+  --app-submit-bg: #111111;
+  --app-submit-text: #ffffff;
+  --app-submit-hover: #000000;
+  --app-spinner-track: rgba(255, 255, 255, 0.35);
+  --app-spinner-head: #ffffff;
+  --app-word-label: #6b7280;
+  --app-word-gray-bg: #f3f4f6;
+  --app-word-gray-text: #111827;
+  --app-phonetic: #4b5563;
+  --app-hint: #6b7280;
+  --app-audio-btn-bg: rgba(0, 0, 0, 0.1);
+  --app-audio-btn-bg-hover: rgba(0, 0, 0, 0.18);
+  --app-translation-text: #000000;
+  --app-translation-placeholder: #9ca3af;
+  --app-translation-audio: #111111;
+}
+
+:is(.dark, .dark-theme) .radix-themes:not(.light, .light-theme),
+.radix-themes:where(.dark, .dark-theme) {
+  --app-bg: #111113;
+  --app-nav-border: rgba(255, 255, 255, 0.12);
+  --app-nav-bg: rgba(28, 28, 31, 0.92);
+  --app-link-strong: #f5f5f5;
+  --app-legal-text: #d4d4d8;
+  --app-nav-item: #b4b4b8;
+  --app-nav-item-active: #ffffff;
+  --app-input-text: #f5f5f5;
+  --app-input-placeholder: #8f8f95;
+  --app-submit-bg: #f5f5f5;
+  --app-submit-text: #111111;
+  --app-submit-hover: #e4e4e7;
+  --app-spinner-track: rgba(17, 17, 17, 0.25);
+  --app-spinner-head: #111111;
+  --app-word-label: #a1a1aa;
+  --app-word-gray-bg: #27272a;
+  --app-word-gray-text: #f5f5f5;
+  --app-phonetic: #a1a1aa;
+  --app-hint: #a1a1aa;
+  --app-audio-btn-bg: rgba(255, 255, 255, 0.14);
+  --app-audio-btn-bg-hover: rgba(255, 255, 255, 0.24);
+  --app-translation-text: #ffffff;
+  --app-translation-placeholder: #a1a1aa;
+  --app-translation-audio: #f5f5f5;
+}
+
 .radix-app-bg {
   min-height: 100vh;
   padding-bottom: calc(82px + env(safe-area-inset-bottom));
+  background: var(--app-bg);
 }
 
 .radix-page-shell {
@@ -37,8 +103,8 @@ a {
   right: 0;
   bottom: 0;
   z-index: 60;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid var(--app-nav-border);
+  background: var(--app-nav-bg);
   backdrop-filter: blur(12px);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -58,19 +124,19 @@ a {
 }
 
 .gdpr-legal-links a {
-  color: #111111;
+  color: var(--app-link-strong);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .legal-html {
-  color: #374151;
+  color: var(--app-legal-text);
   font-size: 14px;
   line-height: 1.65;
 }
 
 .legal-html h2 {
-  color: #111111;
+  color: var(--app-link-strong);
   font-size: 18px;
   margin: 0 0 8px;
 }
@@ -104,7 +170,7 @@ a {
   justify-content: center;
   min-height: 52px;
   border-radius: 12px;
-  color: #525252;
+  color: var(--app-nav-item);
   font-size: 12px;
   line-height: 1.2;
   font-weight: 600;
@@ -119,7 +185,7 @@ a {
 
 .app-bottom-nav-item.is-active {
   background: transparent;
-  color: #000000;
+  color: var(--app-nav-item-active);
   font-weight: 800;
 }
 
@@ -168,13 +234,13 @@ a {
   outline: none;
   background: transparent;
   font: inherit;
-  color: #111111;
+  color: var(--app-input-text);
   width: 100%;
   padding: 10px 4px;
 }
 
 .query-omni-input::placeholder {
-  color: #9ca3af;
+  color: var(--app-input-placeholder);
 }
 
 .query-omni-submit {
@@ -182,8 +248,8 @@ a {
   height: 40px;
   border: 0;
   border-radius: 10px;
-  background: #111111;
-  color: #ffffff;
+  background: var(--app-submit-bg);
+  color: var(--app-submit-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -203,8 +269,8 @@ a {
 .query-btn-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #ffffff;
+  border: 2px solid var(--app-spinner-track);
+  border-top-color: var(--app-spinner-head);
   border-radius: 50%;
   animation: query-spin 0.7s linear infinite;
 }
@@ -226,7 +292,7 @@ a {
 
 .word-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--app-word-label);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -266,9 +332,9 @@ a {
 }
 
 .word-tone-gray {
-  background: #f3f4f6;
+  background: var(--app-word-gray-bg);
   border-color: #d4d4d8;
-  color: #111827;
+  color: var(--app-word-gray-text);
 }
 
 .word-tone-direct {
@@ -311,18 +377,18 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--app-audio-btn-bg);
   color: inherit;
   cursor: pointer;
 }
 
 .word-speak-btn:hover {
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--app-audio-btn-bg-hover);
 }
 
 .word-phonetic-inline {
   font-size: 14px;
-  color: #4b5563;
+  color: var(--app-phonetic);
   font-style: italic;
 }
 
@@ -334,7 +400,7 @@ a {
 
 .query-analysis-hint {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--app-hint);
   line-height: 1.3;
 }
 
@@ -349,29 +415,29 @@ a {
 }
 
 .translation-target-area {
-  color: #000000 !important;
+  color: var(--app-translation-text) !important;
 }
 
 .translation-target-area::placeholder {
-  color: #9ca3af !important;
+  color: var(--app-translation-placeholder) !important;
 }
 
 .translation-target-area :where(.rt-TextAreaInput),
 textarea.translation-target-area {
-  color: #000000 !important;
-  -webkit-text-fill-color: #000000 !important;
+  color: var(--app-translation-text) !important;
+  -webkit-text-fill-color: var(--app-translation-text) !important;
   opacity: 1 !important;
 }
 
 .translation-submit-btn {
-  background: #111111 !important;
-  color: #ffffff !important;
+  background: var(--app-submit-bg) !important;
+  color: var(--app-submit-text) !important;
 }
 
 .translation-submit-btn:hover {
-  background: #000000 !important;
+  background: var(--app-submit-hover) !important;
 }
 
 .translation-audio-btn {
-  color: #111111 !important;
+  color: var(--app-translation-audio) !important;
 }
