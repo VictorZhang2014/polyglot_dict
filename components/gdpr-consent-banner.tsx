@@ -85,7 +85,7 @@ export function GdprConsentBanner() {
                   <Link href="/privacy-policy">{t("gdpr.privacyPolicy")}</Link>
                 </Text>
               </Flex>
-              <Flex align="center" justify="end" gap="2">
+              <Flex direction="column" align="stretch" gap="2">
                 <Button type="button" variant="soft" color="orange" onClick={() => handleDecision("rejected")}>
                   {t("gdpr.reject")}
                 </Button>
