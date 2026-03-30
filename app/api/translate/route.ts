@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { translateWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
-import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -94,21 +93,22 @@ function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguage
 }
 
 export async function POST(request: Request) {
-  const rateLimit = await checkIpRateLimit(request);
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      {
-        error: toEnglishApiErrorMessage(rateLimit.message),
-        code: rateLimit.code
-      },
-      {
-        status: rateLimit.status,
-        headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
-        }
-      }
-    );
-  }
+  // Rate limiter entry is intentionally disabled for now.
+  // const rateLimit = await checkIpRateLimit(request);
+  // if (!rateLimit.allowed) {
+  //   return NextResponse.json(
+  //     {
+  //       error: toEnglishApiErrorMessage(rateLimit.message),
+  //       code: rateLimit.code
+  //     },
+  //     {
+  //       status: rateLimit.status,
+  //       headers: {
+  //         "Retry-After": String(rateLimit.retryAfterSeconds)
+  //       }
+  //     }
+  //   );
+  // }
 
   try {
     const raw = (await request.json()) as TranslateRequest;
