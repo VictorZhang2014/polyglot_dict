@@ -403,9 +403,26 @@ export default function HomePage() {
         })
       });
 
-      const data = (await res.json()) as TranslateApiResponse & { error?: string };
+      const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+      const isJson = contentType.includes("application/json");
+      const rawBody = isJson ? "" : await res.text();
+      const data = (isJson ? await res.json() : null) as (TranslateApiResponse & { error?: string }) | null;
+
       if (!res.ok) {
-        throw new Error(data.error ?? t("home.error.queryFailed"));
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        if (rawBody) {
+          const snippet = rawBody.replace(/\s+/g, " ").slice(0, 180);
+          throw new Error(`API ${res.status}: ${snippet}`);
+        }
+
+        throw new Error(t("home.error.queryFailed"));
+      }
+
+      if (!data) {
+        throw new Error(`API ${res.status} returned non-JSON response.`);
       }
 
       const normalizedPayload: TranslationPayload = {

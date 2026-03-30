@@ -109,9 +109,26 @@ export default function TranslatePage() {
         })
       });
 
-      const data = (await res.json()) as TranslateTextApiResponse & { error?: string };
+      const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+      const isJson = contentType.includes("application/json");
+      const rawBody = isJson ? "" : await res.text();
+      const data = (isJson ? await res.json() : null) as (TranslateTextApiResponse & { error?: string }) | null;
+
       if (!res.ok) {
-        throw new Error(data.error ?? t("translate.error.failed"));
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        if (rawBody) {
+          const snippet = rawBody.replace(/\s+/g, " ").slice(0, 180);
+          throw new Error(`API ${res.status}: ${snippet}`);
+        }
+
+        throw new Error(t("translate.error.failed"));
+      }
+
+      if (!data) {
+        throw new Error(`API ${res.status} returned non-JSON response.`);
       }
 
       setResponse(data);

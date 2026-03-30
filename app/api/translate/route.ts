@@ -94,17 +94,33 @@ function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguage
 }
 
 export async function POST(request: Request) {
-  const rateLimit = await checkIpRateLimit(request);
-  if (!rateLimit.allowed) {
+  try {
+    const rateLimit = await checkIpRateLimit(request);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: toEnglishApiErrorMessage(rateLimit.message),
+          code: rateLimit.code
+        },
+        {
+          status: rateLimit.status,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds)
+          }
+        }
+      );
+    }
+  } catch (error) {
+    console.error("[translate:rate-limit] unexpected failure", error);
     return NextResponse.json(
       {
-        error: toEnglishApiErrorMessage(rateLimit.message),
-        code: rateLimit.code
+        error: "Rate limiter is temporarily unavailable. Please retry in a few seconds.",
+        code: "IP_RATE_LIMIT_UNAVAILABLE"
       },
       {
-        status: rateLimit.status,
+        status: 503,
         headers: {
-          "Retry-After": String(rateLimit.retryAfterSeconds)
+          "Retry-After": "3"
         }
       }
     );
