@@ -67,13 +67,13 @@ const EN_MESSAGES = {
   "settings.saved": "Settings saved",
   "gdpr.title": "Privacy & cookies",
   "gdpr.description":
-    "We use analytics cookies to improve ParlerAI. You can accept or reject. You can continue using the app either way.",
+    "We use necessary cookies for core app functions and optional analytics cookies for improvement.",
   "gdpr.linksPrefix": "Read our",
   "gdpr.linksAnd": "and",
   "gdpr.userAgreement": "User Agreement",
   "gdpr.privacyPolicy": "Privacy Policy",
-  "gdpr.accept": "Accept",
-  "gdpr.reject": "Reject",
+  "gdpr.accept": "Accept all",
+  "gdpr.reject": "Refuse (except necessary cookies)",
   "legal.lastUpdated": "Last updated: March 29, 2026",
 
   "pos.noun": "Noun",
@@ -168,13 +168,13 @@ const ZH_MESSAGES: MessageMap = {
   "settings.version": "版本",
   "settings.saved": "设置已保存",
   "gdpr.title": "隐私与 Cookie",
-  "gdpr.description": "我们使用分析类 Cookie 来改进 ParlerAI。你可以同意或拒绝，拒绝后也可继续使用应用。",
+  "gdpr.description": "我们会使用必要 Cookie 保障核心功能，也会使用可选分析 Cookie 用于改进服务。",
   "gdpr.linksPrefix": "查看",
   "gdpr.linksAnd": "和",
   "gdpr.userAgreement": "用户协议",
   "gdpr.privacyPolicy": "隐私政策",
-  "gdpr.accept": "同意",
-  "gdpr.reject": "拒绝",
+  "gdpr.accept": "同意全部",
+  "gdpr.reject": "拒绝（仅保留必要 Cookie）",
   "legal.lastUpdated": "最后更新：2026年3月29日",
 
   "pos.noun": "名词",
@@ -262,8 +262,8 @@ const DE_MESSAGES: MessageMap = {
   "gdpr.title": "Datenschutz & Cookies",
   "gdpr.description":
     "Wir verwenden Analyse-Cookies, um ParlerAI zu verbessern. Du kannst zustimmen oder ablehnen.",
-  "gdpr.accept": "Zustimmen",
-  "gdpr.reject": "Ablehnen",
+  "gdpr.accept": "Alle akzeptieren",
+  "gdpr.reject": "Ablehnen (außer notwendige Cookies)",
 
   "pos.noun": "Substantiv",
   "pos.verb": "Verb",
@@ -350,8 +350,8 @@ const FR_MESSAGES: MessageMap = {
   "gdpr.title": "Confidentialité et cookies",
   "gdpr.description":
     "Nous utilisons des cookies d'analyse pour améliorer ParlerAI. Vous pouvez accepter ou refuser.",
-  "gdpr.accept": "Accepter",
-  "gdpr.reject": "Refuser",
+  "gdpr.accept": "Tout accepter",
+  "gdpr.reject": "Refuser (sauf cookies nécessaires)",
 
   "pos.noun": "Nom",
   "pos.verb": "Verbe",
@@ -438,8 +438,8 @@ const ES_MESSAGES: MessageMap = {
   "gdpr.title": "Privacidad y cookies",
   "gdpr.description":
     "Usamos cookies de análisis para mejorar ParlerAI. Puedes aceptar o rechazar.",
-  "gdpr.accept": "Aceptar",
-  "gdpr.reject": "Rechazar",
+  "gdpr.accept": "Aceptar todo",
+  "gdpr.reject": "Rechazar (excepto cookies necesarias)",
 
   "pos.noun": "Sustantivo",
   "pos.verb": "Verbo",
@@ -526,8 +526,8 @@ const IT_MESSAGES: MessageMap = {
   "gdpr.title": "Privacy e cookie",
   "gdpr.description":
     "Usiamo cookie di analisi per migliorare ParlerAI. Puoi accettare o rifiutare.",
-  "gdpr.accept": "Accetta",
-  "gdpr.reject": "Rifiuta",
+  "gdpr.accept": "Accetta tutto",
+  "gdpr.reject": "Rifiuta (tranne i cookie necessari)",
 
   "pos.noun": "Sostantivo",
   "pos.verb": "Verbo",
@@ -614,8 +614,8 @@ const PT_MESSAGES: MessageMap = {
   "gdpr.title": "Privacidade e cookies",
   "gdpr.description":
     "Usamos cookies de análise para melhorar o ParlerAI. Você pode aceitar ou recusar.",
-  "gdpr.accept": "Aceitar",
-  "gdpr.reject": "Recusar",
+  "gdpr.accept": "Aceitar tudo",
+  "gdpr.reject": "Recusar (exceto cookies necessários)",
 
   "pos.noun": "Substantivo",
   "pos.verb": "Verbo",
@@ -702,8 +702,8 @@ const JA_MESSAGES: MessageMap = {
   "gdpr.title": "プライバシーとCookie",
   "gdpr.description":
     "ParlerAI 改善のために分析 Cookie を使用します。同意または拒否を選択できます。",
-  "gdpr.accept": "同意する",
-  "gdpr.reject": "拒否する",
+  "gdpr.accept": "すべて同意",
+  "gdpr.reject": "拒否（必要なCookieを除く）",
 
   "pos.noun": "名詞",
   "pos.verb": "動詞",
@@ -790,8 +790,8 @@ const KO_MESSAGES: MessageMap = {
   "gdpr.title": "개인정보 및 쿠키",
   "gdpr.description":
     "ParlerAI 개선을 위해 분석 쿠키를 사용합니다. 동의하거나 거부할 수 있습니다.",
-  "gdpr.accept": "동의",
-  "gdpr.reject": "거부",
+  "gdpr.accept": "모두 동의",
+  "gdpr.reject": "거부(필수 쿠키 제외)",
 
   "pos.noun": "명사",
   "pos.verb": "동사",
@@ -878,8 +878,8 @@ const RU_MESSAGES: MessageMap = {
   "gdpr.title": "Конфиденциальность и cookie",
   "gdpr.description":
     "Мы используем аналитические cookie для улучшения ParlerAI. Вы можете принять или отклонить.",
-  "gdpr.accept": "Принять",
-  "gdpr.reject": "Отклонить",
+  "gdpr.accept": "Принять все",
+  "gdpr.reject": "Отклонить (кроме необходимых cookie)",
 
   "pos.noun": "Существительное",
   "pos.verb": "Глагол",
@@ -966,8 +966,8 @@ const AR_MESSAGES: MessageMap = {
   "gdpr.title": "الخصوصية وملفات تعريف الارتباط",
   "gdpr.description":
     "نستخدم ملفات تعريف الارتباط التحليلية لتحسين ParlerAI. يمكنك القبول أو الرفض.",
-  "gdpr.accept": "موافقة",
-  "gdpr.reject": "رفض",
+  "gdpr.accept": "قبول الكل",
+  "gdpr.reject": "رفض (باستثناء ملفات تعريف الارتباط الضرورية)",
 
   "pos.noun": "اسم",
   "pos.verb": "فعل",
