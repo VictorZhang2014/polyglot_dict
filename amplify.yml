@@ -9,7 +9,7 @@ frontend:
         - rm -f .env.production
         - touch .env.production
         - |
-          for var in OPENAI_API_KEY OPENAI_MODEL OPENAI_TIMEOUT_MS OPENAI_MAX_TOKENS OPENAI_TEXT_MAX_TOKENS RATE_LIMIT_BACKEND RATE_LIMIT_TABLE_NAME RATE_LIMIT_AWS_REGION RATE_LIMIT_FAIL_OPEN; do
+          for var in OPENAI_API_KEY OPENAI_MODEL OPENAI_TIMEOUT_MS OPENAI_MAX_TOKENS OPENAI_TEXT_MAX_TOKENS; do
             value="$(printenv "$var" || true)"
             if [ -n "$value" ]; then
               printf "%s=%s\n" "$var" "$value" >> .env.production
