@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { translateWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
+import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -95,6 +96,17 @@ function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguage
 
 export async function POST(request: Request) {
   try {
+    const rateLimit = await checkIpRateLimit(request);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: rateLimit.message },
+        {
+          status: rateLimit.status,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) }
+        }
+      );
+    }
+
     const raw = (await request.json()) as TranslateRequest;
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);

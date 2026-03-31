@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { translateTextWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
+import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,17 @@ function makeCacheKey(sourceText: string, sourceLanguage: string, targetLanguage
 export async function POST(request: Request) {
   const startedAt = performance.now();
   try {
+    const rateLimit = await checkIpRateLimit(request);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: rateLimit.message },
+        {
+          status: rateLimit.status,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) }
+        }
+      );
+    }
+
     const raw = (await request.json()) as TranslateTextRequest;
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceText, payload.sourceLanguage, payload.targetLanguages);
