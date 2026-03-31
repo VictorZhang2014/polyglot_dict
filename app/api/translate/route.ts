@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { translateWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
+import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 
 export const runtime = "nodejs";
 
@@ -98,8 +99,24 @@ export async function POST(request: Request) {
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);
     const inFlightKey = cacheKey;
+    const cachedData = await getCachedTranslation(cacheKey);
+    if (cachedData) {
+      console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
+      return NextResponse.json({
+        fromCache: true,
+        data: cachedData
+      });
+    }
 
     const translated = await getOrCreateTranslation(inFlightKey, payload);
+
+    cacheTranslation(
+      cacheKey,
+      payload.sourceWord,
+      payload.sourceLanguage,
+      payload.targetLanguages,
+      translated
+    );
 
     return NextResponse.json({
       fromCache: false,
