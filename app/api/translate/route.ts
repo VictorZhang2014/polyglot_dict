@@ -121,7 +121,6 @@ export async function POST(request: Request) {
     }
 
     const translated = await getOrCreateTranslation(inFlightKey, payload);
-
     cacheTranslation(
       cacheKey,
       payload.sourceWord,

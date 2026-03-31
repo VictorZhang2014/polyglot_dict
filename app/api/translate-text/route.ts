@@ -83,8 +83,7 @@ function makeCacheKey(sourceText: string, sourceLanguage: string, targetLanguage
   return createHash("sha256").update(base).digest("hex");
 }
 
-export async function POST(request: Request) {
-  const startedAt = performance.now();
+export async function POST(request: Request) { 
   try {
     const rateLimit = await checkIpRateLimit(request);
     if (!rateLimit.allowed) {
@@ -101,10 +100,7 @@ export async function POST(request: Request) {
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceText, payload.sourceLanguage, payload.targetLanguages);
 
-    const translated = await getOrCreateTranslation(cacheKey, payload);
-    const totalMs = performance.now() - startedAt;
-    console.log(`[translate:text] total=${totalMs.toFixed(2)}ms`);
-
+    const translated = await getOrCreateTranslation(cacheKey, payload); 
     return NextResponse.json({
       fromCache: false,
       data: translated

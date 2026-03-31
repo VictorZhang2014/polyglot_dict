@@ -540,7 +540,7 @@ async function requestOpenAIContent(params: {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0,
-        max_tokens: maxTokens,
+        // max_tokens: maxTokens,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
