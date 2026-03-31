@@ -1,14 +1,13 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-const region = process.env.AWS_REGION || "us-east-1";
-
 // Create a persistent client connection
 const client = new DynamoDBClient({
-  region: region,
-  // If credentials are provided in env, SDK uses them automatically.
-  // We can explicitly pass them if needed, but default credential provider handles
-  // AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
+  region: process.env.AI_AWS_REGION || "eu-central-1",
+  credentials: {
+    accessKeyId: process.env.AI_AWS_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.AI_AWS_SECRET_ACCESS_KEY || ""
+  }
 });
 
 // Configure document client
@@ -24,7 +23,7 @@ const docClient = DynamoDBDocumentClient.from(client, {
 });
 
 export async function getCachedTranslation(cacheKey: string) {
-  const tableName = process.env.DYNAMODB_TABLE_NAME;
+  const tableName = process.env.AI_DYNAMODB_TABLE_NAME;
   if (!tableName) return null;
 
   try {
@@ -48,7 +47,7 @@ export async function cacheTranslation(
   targetLanguages: string[],
   data: any
 ) {
-  const tableName = process.env.DYNAMODB_TABLE_NAME;
+  const tableName = process.env.AI_DYNAMODB_TABLE_NAME;
   if (!tableName) return;
 
   try {

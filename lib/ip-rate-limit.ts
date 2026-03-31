@@ -193,7 +193,7 @@ function checkIpRateLimitInMemory(request: Request): IpRateLimitResult {
 }
 
 async function checkIpRateLimitDynamoDb(request: Request): Promise<IpRateLimitResult> {
-  const tableName = process.env.DYNAMODB_TABLE_NAME;
+  const tableName = process.env.AI_DYNAMODB_TABLE_NAME;
   if (!tableName) {
     // Fallback to memory store if no table configured
     return checkIpRateLimitInMemory(request);
