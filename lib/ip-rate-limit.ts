@@ -1,3 +1,6 @@
+import { docClient } from "./dynamodb";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+
 const MIN_INTERVAL_MS = 3000;
 const DAILY_LIMIT = 50;
 const CLEANUP_EVERY = 200;
@@ -189,6 +192,63 @@ function checkIpRateLimitInMemory(request: Request): IpRateLimitResult {
   return { allowed: true };
 }
 
+async function checkIpRateLimitDynamoDb(request: Request): Promise<IpRateLimitResult> {
+  const tableName = process.env.DYNAMODB_TABLE_NAME;
+  if (!tableName) {
+    // Fallback to memory store if no table configured
+    return checkIpRateLimitInMemory(request);
+  }
+
+  const now = Date.now();
+  const ip = getClientIp(request);
+  const dayKey = toDayKey(now);
+  const limitKey = `RATELIMIT#${ip}#${dayKey}`;
+
+  try {
+    const getResult = await docClient.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: { id: limitKey }
+      })
+    );
+
+    const entry = getResult.Item;
+
+    if (entry) {
+      const elapsed = now - (entry.lastRequestAt || 0);
+      if (elapsed < MIN_INTERVAL_MS) {
+        return intervalResult(elapsed);
+      }
+
+      const count = entry.dailyCount || 0;
+      if (count >= DAILY_LIMIT) {
+        return dailyResult(now);
+      }
+    }
+
+    // Pass first checks, now atomicaly increment and update timestamp
+    await docClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { id: limitKey },
+        UpdateExpression:
+          "SET dailyCount = if_not_exists(dailyCount, :zero) + :inc, lastRequestAt = :now, createdAt = if_not_exists(createdAt, :now)",
+        ExpressionAttributeValues: {
+          ":inc": 1,
+          ":zero": 0,
+          ":now": now
+        }
+      })
+    );
+
+    return { allowed: true };
+  } catch (error) {
+    console.error("[ip-rate-limit] DynamoDB error:", error);
+    // If DynamoDB fails, fall back softly to memory so we don't bring down the API
+    return checkIpRateLimitInMemory(request);
+  }
+}
+
 export async function checkIpRateLimit(request: Request): Promise<IpRateLimitResult> {
-  return checkIpRateLimitInMemory(request);
+  return checkIpRateLimitDynamoDb(request);
 }
