@@ -30,6 +30,7 @@ const WORD_PROMPT_RESPONSE_SCHEMA = `Return exactly one JSON object with this sc
 {
   "sourcePhonetic": string,
   "correctedSourceWord": string,
+  "suggestedSourceWords": [string],
   "sourcePartOfSpeech": "noun" | "verb" | "adjective" | "adverb" | "pronoun" | "preposition" | "conjunction" | "interjection" | "numeral" | "particle" | "determiner" | "unknown",
   "sourceLemma": string,
   "sourcePluralForm": string,
@@ -47,6 +48,7 @@ const WORD_PROMPT_RULES = `Rules:
 - Analyze the source token strictly within the provided source language only; ignore homographs from other languages.
 - Example: when source language is de, token "die" is a determiner/article, not an English verb.
 - If the input spelling is wrong, interpret and translate the corrected word, and ensure all metadata refers to that corrected word.
+- If you are not confident what the intended source word is, keep translations empty, keep correctedSourceWord empty, and return 3-5 likely source-language candidates in suggestedSourceWords.
 - sourcePhonetic must match the final valid source word: if correctedSourceWord is non-empty, sourcePhonetic must be for correctedSourceWord; otherwise it must be for the original input.
 - sourceLemma should be dictionary base form; if input is inflected, return lemma.
 - sourcePluralForm must be the noun plural form when sourcePartOfSpeech is noun; otherwise keep it empty.
@@ -62,9 +64,21 @@ const WORD_PROMPT_RULES = `Rules:
 - similarWords must not duplicate directTranslation.`;
 const WORD_RETRY_RULES = `- Ensure sourcePhonetic matches the final valid source word after any spelling correction.
 - Ensure noun entries include sourcePluralForm, and it refers to the final valid source word after any spelling correction.
+- If the intended word is still uncertain, return 3-5 candidates in suggestedSourceWords instead of guessing translations.
 - Reject cross-language leakage in directTranslation and similarWords.
 - Validate part-of-speech and lemma strictly in the source language context.
 - Return valid JSON only.`;
+const WORD_SUGGEST_SYSTEM_PROMPT = "You suggest likely intended source words for misspelled input. Return strict JSON only.";
+const WORD_SUGGEST_RESPONSE_SCHEMA = `Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):
+{
+  "suggestedSourceWords": [string]
+}`;
+const WORD_SUGGEST_RULES = `Rules:
+- Work only in the provided source language.
+- Return 3-5 likely intended source words for the misspelled input.
+- Return only real, standard words in the source language.
+- Order candidates from most likely to least likely.
+- If you are very unsure, return fewer items instead of inventing words.`;
 const TEXT_SYSTEM_PROMPT = "You are a multilingual translation assistant. Return strict CSV only.";
 const TEXT_PROMPT_RULES = `Return CSV with header exactly:
 targetLanguage,translatedText
@@ -104,6 +118,15 @@ function buildTextUserPrompt(input: TranslateTextInput): string {
   ].join("\n");
 }
 
+function buildWordSuggestionPrompt(input: TranslateInput): string {
+  return [
+    `Misspelled source word: "${input.sourceWord}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    WORD_SUGGEST_RESPONSE_SCHEMA,
+    WORD_SUGGEST_RULES
+  ].join("\n");
+}
+
 function supportsGrammaticalGender(code: string): boolean {
   return GENDERED_LANGUAGE_CODES.has(code.trim().toLowerCase());
 }
@@ -118,6 +141,20 @@ function uniqueStrings(values: unknown, limit = 10): string[] {
     .filter(Boolean);
 
   return Array.from(new Set(cleaned)).slice(0, limit);
+}
+
+function uniqueTrimmedStrings(values: unknown, limit = 10): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter(Boolean)
+    )
+  ).slice(0, limit);
 }
 
 function toText(value: unknown): string {
@@ -288,6 +325,7 @@ function normalizePayload(raw: unknown, input: TranslateInput): TranslationPaylo
     sourceLanguage: input.sourceLanguage,
     sourcePhonetic: toText(source.sourcePhonetic),
     correctedSourceWord: toText(source.correctedSourceWord),
+    suggestedSourceWords: uniqueTrimmedStrings(source.suggestedSourceWords, 5),
     sourcePartOfSpeech,
     sourceLemma: toText(source.sourceLemma),
     sourcePluralForm: toText(source.sourcePluralForm),
@@ -316,6 +354,40 @@ function hasSuspiciousTargetLanguageLeakage(input: TranslateInput, payload: Tran
   });
 }
 
+function shouldSuggestCandidates(input: TranslateInput, payload: TranslationPayload): boolean {
+  const hasResolvedTranslations = payload.translations.some(
+    (item) => Boolean(item.directTranslation) || item.similarWords.length > 0
+  );
+  const hasConfidentCorrection =
+    Boolean(payload.correctedSourceWord?.trim()) && normalizeWord(payload.correctedSourceWord ?? "") !== normalizeWord(input.sourceWord);
+  const hasSuggestions = (payload.suggestedSourceWords?.length ?? 0) > 0;
+
+  return !hasResolvedTranslations && !hasConfidentCorrection && !hasSuggestions;
+}
+
+function hasResolvedWordResult(payload: TranslationPayload): boolean {
+  const hasResolvedTranslations = payload.translations.some(
+    (item) => Boolean(item.directTranslation) || item.similarWords.length > 0
+  );
+
+  return (
+    hasResolvedTranslations ||
+    Boolean(payload.sourceLemma?.trim()) ||
+    normalizePartOfSpeech(payload.sourcePartOfSpeech) !== "unknown"
+  );
+}
+
+function clearSuggestionsIfResolved(payload: TranslationPayload): TranslationPayload {
+  if (!hasResolvedWordResult(payload) || (payload.suggestedSourceWords?.length ?? 0) === 0) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    suggestedSourceWords: []
+  };
+}
+
 function mergeCorrectedWordPayload(
   originalPayload: TranslationPayload,
   correctedPayload: TranslationPayload
@@ -327,6 +399,10 @@ function mergeCorrectedWordPayload(
     sourceLemma: correctedPayload.sourceLemma || originalPayload.sourceLemma || "",
     sourcePluralForm: correctedPayload.sourcePluralForm || originalPayload.sourcePluralForm || "",
     sourceMorphology: correctedPayload.sourceMorphology || originalPayload.sourceMorphology || "",
+    suggestedSourceWords:
+      (correctedPayload.suggestedSourceWords?.length ?? 0) > 0
+        ? correctedPayload.suggestedSourceWords
+        : (originalPayload.suggestedSourceWords ?? []),
     sourceGenderHints:
       (correctedPayload.sourceGenderHints?.length ?? 0) > 0
         ? correctedPayload.sourceGenderHints
@@ -357,6 +433,13 @@ function sanitizeTranslationsAgainstSource(input: TranslateInput, payload: Trans
         similarWords
       };
     })
+  };
+}
+
+function createSuggestionOnlyPayload(input: TranslateInput, suggestions: string[]): TranslationPayload {
+  return {
+    ...createEmptyWordPayload(input),
+    suggestedSourceWords: suggestions
   };
 }
 
@@ -525,10 +608,29 @@ function csvValues(row: string[], startIndex: number): string[] {
     .filter(Boolean);
 }
 
+function parseSuggestedSourceWords(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueTrimmedStrings(value, 5);
+  }
+
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return uniqueTrimmedStrings(
+    value
+      .split(/[\n,;|]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    5
+  );
+}
+
 function hasMeaningfulWordPayload(payload: TranslationPayload): boolean {
   const hasSourceMeta =
     Boolean(payload.sourcePhonetic) ||
     Boolean(payload.correctedSourceWord) ||
+    (payload.suggestedSourceWords?.length ?? 0) > 0 ||
     Boolean(payload.sourceLemma) ||
     Boolean(payload.sourcePluralForm) ||
     Boolean(payload.sourceMorphology) ||
@@ -548,6 +650,7 @@ function createEmptyWordPayload(input: TranslateInput): TranslationPayload {
     sourceLanguage: input.sourceLanguage,
     sourcePhonetic: "",
     correctedSourceWord: "",
+    suggestedSourceWords: [],
     sourcePartOfSpeech: "unknown",
     sourceLemma: "",
     sourcePluralForm: "",
@@ -615,6 +718,7 @@ function normalizePayloadFromCsv(csv: string, input: TranslateInput): Translatio
     sourceLanguage: input.sourceLanguage,
     sourcePhonetic: metaMap.get("sourcephonetic") ?? "",
     correctedSourceWord: metaMap.get("correctedsourceword") ?? "",
+    suggestedSourceWords: parseSuggestedSourceWords(metaMap.get("suggestedsourcewords")),
     sourcePartOfSpeech,
     sourceLemma: metaMap.get("sourcelemma") ?? "",
     sourcePluralForm: metaMap.get("sourcepluralform") ?? "",
@@ -687,6 +791,7 @@ function normalizePayloadFromMarkdownTable(table: string, input: TranslateInput)
     sourceLanguage: input.sourceLanguage,
     sourcePhonetic: metaMap.get("sourcephonetic") ?? "",
     correctedSourceWord: metaMap.get("correctedsourceword") ?? "",
+    suggestedSourceWords: parseSuggestedSourceWords(metaMap.get("suggestedsourcewords")),
     sourcePartOfSpeech,
     sourceLemma: metaMap.get("sourcelemma") ?? "",
     sourcePluralForm: metaMap.get("sourcepluralform") ?? "",
@@ -719,6 +824,27 @@ function parseWordPayloadFlexible(content: string, input: TranslateInput): Trans
   return createEmptyWordPayload(input);
 }
 
+function parseSuggestedWordsContent(content: string): string[] {
+  try {
+    const parsed = JSON.parse(content) as { suggestedSourceWords?: unknown };
+    return parseSuggestedSourceWords(parsed.suggestedSourceWords);
+  } catch {
+    return [];
+  }
+}
+
+async function requestWordSuggestions(input: TranslateInput, apiKey: string): Promise<string[]> {
+  const content = await requestOpenAIContent({
+    apiKey,
+    systemPrompt: WORD_SUGGEST_SYSTEM_PROMPT,
+    userPrompt: buildWordSuggestionPrompt(input),
+    maxTokens: Math.min(OPENAI_MAX_TOKENS, 120),
+    logLabel: "openai:word-suggest"
+  });
+
+  return parseSuggestedWordsContent(content);
+}
+
 async function requestOpenAIContent(params: {
   apiKey: string;
   systemPrompt: string;
@@ -743,7 +869,7 @@ async function requestOpenAIContent(params: {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0,
-        // max_tokens: maxTokens,
+        max_tokens: maxTokens,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -853,18 +979,50 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
     return sanitizeTranslationsAgainstSource(requestInput, applySourceLanguageOverrides(requestInput, payload));
   };
 
-  let payload = await requestWordPayload(input);
+  let payload: TranslationPayload;
+  try {
+    payload = await requestWordPayload(input);
+  } catch (error) {
+    try {
+      const suggestions = await requestWordSuggestions(input, apiKey);
+      if (suggestions.length > 0) {
+        return createSuggestionOnlyPayload(input, suggestions);
+      }
+    } catch {
+      // Fall through to original error below.
+    }
+
+    throw error;
+  }
 
   if (shouldRefineCorrectedWordPayload(input, payload)) {
     const correctedWord = payload.correctedSourceWord!.trim();
-    const correctedPayload = await requestWordPayload({
-      ...input,
-      sourceWord: correctedWord
-    });
-    payload = mergeCorrectedWordPayload(payload, correctedPayload);
+    try {
+      const correctedPayload = await requestWordPayload({
+        ...input,
+        sourceWord: correctedWord
+      });
+      payload = mergeCorrectedWordPayload(payload, correctedPayload);
+    } catch {
+      // Keep the original payload if the refinement pass fails or times out.
+    }
   }
 
-  return payload;
+  if (shouldSuggestCandidates(input, payload)) {
+    try {
+      const suggestions = await requestWordSuggestions(input, apiKey);
+      if (suggestions.length > 0) {
+        payload = {
+          ...payload,
+          suggestedSourceWords: suggestions
+        };
+      }
+    } catch {
+      // Keep the best payload we already have.
+    }
+  }
+
+  return clearSuggestionsIfResolved(payload);
 }
 
 export async function translateWithOpenAI(input: TranslateInput): Promise<TranslationPayload> {

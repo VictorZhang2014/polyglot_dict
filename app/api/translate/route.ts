@@ -86,7 +86,7 @@ async function getOrCreateTranslation(
 
 function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
   const base = JSON.stringify({
-    v: 16,
+    v: 18,
     sourceWord: sourceWord.toLowerCase(),
     sourceLanguage,
     targetLanguages: [...targetLanguages].sort()
@@ -109,6 +109,10 @@ function resolveStoredSourceWord(payload: TranslationPayload, fallbackWord: stri
   return fallbackWord.trim();
 }
 
+function hasSuccessfulTranslation(payload: TranslationPayload): boolean {
+  return payload.translations.some((item) => Boolean(item.directTranslation?.trim()));
+}
+
 export async function POST(request: Request) {
   try {
     const rateLimit = await checkIpRateLimit(request);
@@ -126,8 +130,8 @@ export async function POST(request: Request) {
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);
     const inFlightKey = cacheKey;
-    const cachedData = await getCachedTranslation(cacheKey);
-    if (cachedData) {
+    const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
+    if (cachedData && hasSuccessfulTranslation(cachedData)) {
       console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
       return NextResponse.json({
         fromCache: true,
@@ -136,13 +140,15 @@ export async function POST(request: Request) {
     }
 
     const translated = await getOrCreateTranslation(inFlightKey, payload);
-    cacheTranslation(
-      cacheKey,
-      resolveStoredSourceWord(translated, payload.sourceWord),
-      payload.sourceLanguage,
-      payload.targetLanguages,
-      translated
-    );
+    if (hasSuccessfulTranslation(translated)) {
+      cacheTranslation(
+        cacheKey,
+        resolveStoredSourceWord(translated, payload.sourceWord),
+        payload.sourceLanguage,
+        payload.targetLanguages,
+        translated
+      );
+    }
 
     return NextResponse.json({
       fromCache: false,

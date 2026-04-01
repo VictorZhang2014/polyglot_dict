@@ -22,6 +22,7 @@ export type TranslationPayload = {
   sourceLanguage: string;
   sourcePhonetic?: string;
   correctedSourceWord?: string;
+  suggestedSourceWords?: string[];
   sourcePartOfSpeech?: string;
   sourceLemma?: string;
   sourcePluralForm?: string;

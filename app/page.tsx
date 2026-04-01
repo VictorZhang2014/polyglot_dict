@@ -111,6 +111,19 @@ function hasAnyDirectTranslation(payload: TranslationPayload, targetLanguages: s
   return targetLanguages.some((code) => Boolean(map.get(code)));
 }
 
+function shouldShowSourceSuggestions(payload: TranslationPayload): boolean {
+  const hasResolvedTranslations = payload.translations.some(
+    (item) => Boolean(item.directTranslation.trim()) || item.similarWords.length > 0
+  );
+
+  return (
+    (payload.suggestedSourceWords?.length ?? 0) > 0 &&
+    !hasResolvedTranslations &&
+    !payload.sourceLemma?.trim() &&
+    normalizeWord(payload.sourcePartOfSpeech ?? "") === "unknown"
+  );
+}
+
 export default function HomePage() {
   const { t } = useI18n();
   const router = useRouter();
@@ -308,6 +321,13 @@ export default function HomePage() {
   const sourcePartOfSpeech = response?.data.sourcePartOfSpeech ?? "";
   const sourceLemma = response?.data.sourceLemma?.trim() ?? "";
   const sourcePluralForm = response?.data.sourcePluralForm?.trim() ?? "";
+  const suggestedSourceWords = useMemo(() => {
+    if (!response || !shouldShowSourceSuggestions(response.data)) {
+      return [];
+    }
+
+    return response.data.suggestedSourceWords ?? [];
+  }, [response]);
   const sourceMorphology = response?.data.sourceMorphology?.trim() ?? "";
   const allowGenderDisplay = supportsGrammaticalGender(sourceLanguage);
   const sourceGenderHints =
@@ -369,6 +389,24 @@ export default function HomePage() {
 
     return chunks.join(" · ");
   }, [response, sourcePartOfSpeech, sourceLemma, sourcePluralForm, displaySourceGender, displaySourceWord, allowGenderDisplay, t]);
+  const displaySourceMorphology = useMemo(() => {
+    if (!sourceMorphology) {
+      return "";
+    }
+
+    const normalizedMorphology = normalizeWord(sourceMorphology).replace(/['"`]/g, "");
+    const normalizedPluralForm = normalizeWord(sourcePluralForm).replace(/['"`]/g, "");
+    const repeatsPluralInfo =
+      sourcePartOfSpeech.toLowerCase() === "noun" &&
+      Boolean(normalizedPluralForm) &&
+      normalizedMorphology.includes("plural") &&
+      normalizedMorphology.includes(normalizedPluralForm);
+
+    return repeatsPluralInfo ? "" : sourceMorphology;
+  }, [sourceMorphology, sourcePluralForm, sourcePartOfSpeech]);
+  const isTimeoutError = useMemo(() => {
+    return error.toLowerCase().includes("timed out");
+  }, [error]);
 
   const runQuery = useCallback(async (word: string, languageCode: string) => {
     setError("");
@@ -452,6 +490,7 @@ export default function HomePage() {
 
       const normalizedPayload: TranslationPayload = {
         ...data.data,
+        suggestedSourceWords: Array.from(new Set(data.data.suggestedSourceWords ?? [])).slice(0, 5),
         translations: targets.map((targetLanguage) => {
           const item = data.data.translations.find((entry) => entry.targetLanguage === targetLanguage);
           return {
@@ -467,16 +506,28 @@ export default function HomePage() {
         data: normalizedPayload
       });
 
-      if (hasAnyDirectTranslation(normalizedPayload, targets)) {
+      const hasDirectTranslation = hasAnyDirectTranslation(normalizedPayload, targets);
+      const hasResolvedWordData =
+        hasDirectTranslation ||
+        normalizedPayload.sourcePartOfSpeech !== "unknown" ||
+        Boolean(normalizedPayload.correctedSourceWord?.trim()) ||
+        Boolean(normalizedPayload.sourceLemma?.trim()) ||
+        Boolean(normalizedPayload.sourcePluralForm?.trim()) ||
+        Boolean(normalizedPayload.sourceMorphology?.trim()) ||
+        (normalizedPayload.sourceGenderHints?.length ?? 0) > 0;
+
+      if (hasDirectTranslation) {
         await setTranslationCacheEntry(cacheKey, normalizedPayload);
       }
 
-      addQueryHistory({
-        sourceWord: resolveHistorySourceWord(normalizedPayload, word),
-        sourceLanguage: languageCode,
-        targetLanguages: targets,
-        targetTranslations: buildHistoryTranslations(normalizedPayload, targets)
-      });
+      if (hasResolvedWordData) {
+        addQueryHistory({
+          sourceWord: resolveHistorySourceWord(normalizedPayload, word),
+          sourceLanguage: languageCode,
+          targetLanguages: targets,
+          targetTranslations: buildHistoryTranslations(normalizedPayload, targets)
+        });
+      }
     } catch (queryError) {
       const message = queryError instanceof Error ? queryError.message : t("home.error.queryFailed");
       setError(message);
@@ -570,7 +621,7 @@ export default function HomePage() {
       </Text>
 
       {error ? (
-        <Callout.Root color="gray" variant="soft">
+        <Callout.Root color={isTimeoutError ? "blue" : "gray"} variant="soft">
           <Callout.Icon>
             <InfoCircledIcon />
           </Callout.Icon>
@@ -600,7 +651,28 @@ export default function HomePage() {
               <Text className="word-phonetic-inline">{sourcePhonetic ? `/${sourcePhonetic}/` : t("home.phoneticPending")}</Text>
             </Flex>
             {sourceMetaLine ? <Text className="query-analysis-hint">{sourceMetaLine}</Text> : null}
-            {sourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: sourceMorphology })}</Text> : null}
+            {displaySourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: displaySourceMorphology })}</Text> : null}
+            {suggestedSourceWords.length > 0 ? (
+              <Box>
+                <Text className="word-label" mb="2">
+                  {t("home.suggestions")}
+                </Text>
+                <div className="word-block">
+                  {suggestedSourceWords.map((word, index) =>
+                    renderSpeakableWord(
+                      word,
+                      sourceLanguage,
+                      "similar",
+                      "md",
+                      `suggested:${index}:${word}`,
+                      {
+                        queryHref: `/?q=${encodeURIComponent(word)}&code=${encodeURIComponent(sourceLanguage)}`
+                      }
+                    )
+                  )}
+                </div>
+              </Box>
+            ) : null}
 
           </Flex>
         </Card>
