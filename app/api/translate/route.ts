@@ -4,6 +4,7 @@ import { translateWithOpenAI } from "@/lib/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
+import type { TranslationPayload } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -85,13 +86,27 @@ async function getOrCreateTranslation(
 
 function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
   const base = JSON.stringify({
-    v: 12,
+    v: 16,
     sourceWord: sourceWord.toLowerCase(),
     sourceLanguage,
     targetLanguages: [...targetLanguages].sort()
   });
 
   return createHash("sha256").update(base).digest("hex");
+}
+
+function resolveStoredSourceWord(payload: TranslationPayload, fallbackWord: string): string {
+  const corrected = payload.correctedSourceWord?.trim() ?? "";
+  if (corrected) {
+    return corrected;
+  }
+
+  const sourceWord = payload.sourceWord?.trim() ?? "";
+  if (sourceWord) {
+    return sourceWord;
+  }
+
+  return fallbackWord.trim();
 }
 
 export async function POST(request: Request) {
@@ -123,7 +138,7 @@ export async function POST(request: Request) {
     const translated = await getOrCreateTranslation(inFlightKey, payload);
     cacheTranslation(
       cacheKey,
-      payload.sourceWord,
+      resolveStoredSourceWord(translated, payload.sourceWord),
       payload.sourceLanguage,
       payload.targetLanguages,
       translated

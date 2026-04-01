@@ -92,6 +92,20 @@ function buildHistoryTranslations(payload: TranslationPayload, targetLanguages: 
   });
 }
 
+function resolveHistorySourceWord(payload: TranslationPayload, fallbackWord: string): string {
+  const corrected = payload.correctedSourceWord?.trim() ?? "";
+  if (corrected) {
+    return corrected;
+  }
+
+  const sourceWord = payload.sourceWord?.trim() ?? "";
+  if (sourceWord) {
+    return sourceWord;
+  }
+
+  return fallbackWord.trim();
+}
+
 function hasAnyDirectTranslation(payload: TranslationPayload, targetLanguages: string[]): boolean {
   const map = new Map(payload.translations.map((item) => [item.targetLanguage, item.directTranslation.trim()]));
   return targetLanguages.some((code) => Boolean(map.get(code)));
@@ -271,11 +285,12 @@ export default function HomePage() {
   }, [response, visibleTargets]);
 
   const sourcePhonetic = useMemo(() => {
-    if (!response || response.data.sourceWord.trim().toLowerCase() !== sourceWord.trim().toLowerCase()) {
+    if (!response) {
       return "";
     }
+
     return response.data.sourcePhonetic?.trim() ?? "";
-  }, [response, sourceWord]);
+  }, [response]);
 
   const correctedSourceWord = useMemo(() => {
     if (!response) {
@@ -287,11 +302,12 @@ export default function HomePage() {
       return "";
     }
 
-    return normalizeWord(corrected) === normalizeWord(sourceWord) ? "" : corrected;
-  }, [response, sourceWord]);
+    return normalizeWord(corrected) === normalizeWord(response.data.sourceWord) ? "" : corrected;
+  }, [response]);
 
   const sourcePartOfSpeech = response?.data.sourcePartOfSpeech ?? "";
   const sourceLemma = response?.data.sourceLemma?.trim() ?? "";
+  const sourcePluralForm = response?.data.sourcePluralForm?.trim() ?? "";
   const sourceMorphology = response?.data.sourceMorphology?.trim() ?? "";
   const allowGenderDisplay = supportsGrammaticalGender(sourceLanguage);
   const sourceGenderHints =
@@ -301,8 +317,13 @@ export default function HomePage() {
       return correctedSourceWord;
     }
 
+    const queriedSourceWord = response?.data.sourceWord?.trim() ?? "";
+    if (queriedSourceWord) {
+      return queriedSourceWord;
+    }
+
     return sourceWord.trim();
-  }, [correctedSourceWord, sourceWord]);
+  }, [correctedSourceWord, response, sourceWord]);
   const displaySourceGender = useMemo(() => {
     if (sourcePartOfSpeech.toLowerCase() !== "noun" || sourceGenderHints.length === 0 || !displaySourceWord) {
       return "";
@@ -334,6 +355,10 @@ export default function HomePage() {
       chunks.push(t("home.meta.lemma", { lemma: sourceLemma }));
     }
 
+    if (sourcePartOfSpeech.toLowerCase() === "noun" && sourcePluralForm) {
+      chunks.push(t("home.meta.plural", { plural: sourcePluralForm }));
+    }
+
     if (displaySourceGender) {
       chunks.push(t("home.meta.gender", { gender: displaySourceGender }));
     }
@@ -343,7 +368,7 @@ export default function HomePage() {
     }
 
     return chunks.join(" · ");
-  }, [response, sourcePartOfSpeech, sourceLemma, displaySourceGender, displaySourceWord, allowGenderDisplay, t]);
+  }, [response, sourcePartOfSpeech, sourceLemma, sourcePluralForm, displaySourceGender, displaySourceWord, allowGenderDisplay, t]);
 
   const runQuery = useCallback(async (word: string, languageCode: string) => {
     setError("");
@@ -380,7 +405,7 @@ export default function HomePage() {
           };
 
           addQueryHistory({
-            sourceWord: word,
+            sourceWord: resolveHistorySourceWord(cachedResponse.data, word),
             sourceLanguage: languageCode,
             targetLanguages: targets,
             targetTranslations: buildHistoryTranslations(cachedResponse.data, targets)
@@ -447,7 +472,7 @@ export default function HomePage() {
       }
 
       addQueryHistory({
-        sourceWord: word,
+        sourceWord: resolveHistorySourceWord(normalizedPayload, word),
         sourceLanguage: languageCode,
         targetLanguages: targets,
         targetTranslations: buildHistoryTranslations(normalizedPayload, targets)
@@ -572,7 +597,7 @@ export default function HomePage() {
                     {t("home.pendingInput")}
                   </Badge>
                 )}
-              <Text className="word-phonetic-inline">{sourcePhonetic ? sourcePhonetic : t("home.phoneticPending")}</Text>
+              <Text className="word-phonetic-inline">{sourcePhonetic ? `/${sourcePhonetic}/` : t("home.phoneticPending")}</Text>
             </Flex>
             {sourceMetaLine ? <Text className="query-analysis-hint">{sourceMetaLine}</Text> : null}
             {sourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: sourceMorphology })}</Text> : null}

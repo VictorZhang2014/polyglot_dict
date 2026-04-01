@@ -49,6 +49,22 @@ function normalizeWord(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeComparableWord(value: string): string {
+  return normalizeWord(value)
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) {
+    index += 1;
+  }
+  return index;
+}
+
 function normalizeCellToken(value: string): string {
   let next = toText(value);
 
@@ -130,6 +146,48 @@ function normalizeTranslationItem(raw: unknown, targetLanguage: string): Transla
   };
 }
 
+function buildSourceCandidates(input: TranslateInput, payload: TranslationPayload): string[] {
+  return Array.from(
+    new Set(
+      [
+        input.sourceWord,
+        payload.sourceWord,
+        payload.correctedSourceWord ?? "",
+        payload.sourceLemma ?? "",
+        payload.sourcePluralForm ?? "",
+        ...(payload.sourceGenderHints ?? []).map((item) => item.word)
+      ]
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function isSourceLikeTargetWord(value: string, sourceCandidates: string[]): boolean {
+  const normalizedValue = normalizeComparableWord(value);
+  if (normalizedValue.length < 4) {
+    return false;
+  }
+
+  return sourceCandidates.some((candidate) => {
+    const normalizedCandidate = normalizeComparableWord(candidate);
+    if (normalizedCandidate.length < 4) {
+      return false;
+    }
+
+    if (normalizedValue === normalizedCandidate) {
+      return true;
+    }
+
+    const minLength = Math.min(normalizedValue.length, normalizedCandidate.length);
+    if (minLength >= 5 && (normalizedValue.startsWith(normalizedCandidate) || normalizedCandidate.startsWith(normalizedValue))) {
+      return true;
+    }
+
+    return minLength >= 6 && commonPrefixLength(normalizedValue, normalizedCandidate) >= 4;
+  });
+}
+
 function normalizePayload(raw: unknown, input: TranslateInput): TranslationPayload {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const map = new Map<string, unknown>();
@@ -153,11 +211,73 @@ function normalizePayload(raw: unknown, input: TranslateInput): TranslationPaylo
     correctedSourceWord: toText(source.correctedSourceWord),
     sourcePartOfSpeech,
     sourceLemma: toText(source.sourceLemma),
+    sourcePluralForm: toText(source.sourcePluralForm),
     sourceMorphology: toText(source.sourceMorphology),
     sourceGenderHints: shouldShowGender ? normalizeGenderHints(source.sourceGenderHints) : [],
     translations: input.targetLanguages.map((targetLanguage) =>
       normalizeTranslationItem(map.get(targetLanguage), targetLanguage)
     )
+  };
+}
+
+function shouldRefineCorrectedWordPayload(input: TranslateInput, payload: TranslationPayload): boolean {
+  const corrected = payload.correctedSourceWord?.trim() ?? "";
+  return Boolean(corrected) && normalizeWord(corrected) !== normalizeWord(input.sourceWord);
+}
+
+function hasSuspiciousTargetLanguageLeakage(input: TranslateInput, payload: TranslationPayload): boolean {
+  const sourceCandidates = buildSourceCandidates(input, payload);
+
+  return payload.translations.some((item) => {
+    const directSuspicious =
+      payload.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(item.directTranslation, sourceCandidates);
+    const suspiciousSimilarCount = item.similarWords.filter((word) => isSourceLikeTargetWord(word, sourceCandidates)).length;
+
+    return directSuspicious || suspiciousSimilarCount > 0;
+  });
+}
+
+function mergeCorrectedWordPayload(
+  originalPayload: TranslationPayload,
+  correctedPayload: TranslationPayload
+): TranslationPayload {
+  return {
+    ...originalPayload,
+    sourcePhonetic: correctedPayload.sourcePhonetic || originalPayload.sourcePhonetic || "",
+    sourcePartOfSpeech: correctedPayload.sourcePartOfSpeech || originalPayload.sourcePartOfSpeech || "unknown",
+    sourceLemma: correctedPayload.sourceLemma || originalPayload.sourceLemma || "",
+    sourcePluralForm: correctedPayload.sourcePluralForm || originalPayload.sourcePluralForm || "",
+    sourceMorphology: correctedPayload.sourceMorphology || originalPayload.sourceMorphology || "",
+    sourceGenderHints:
+      (correctedPayload.sourceGenderHints?.length ?? 0) > 0
+        ? correctedPayload.sourceGenderHints
+        : (originalPayload.sourceGenderHints ?? []),
+    translations: correctedPayload.translations.length > 0 ? correctedPayload.translations : originalPayload.translations
+  };
+}
+
+function sanitizeTranslationsAgainstSource(input: TranslateInput, payload: TranslationPayload): TranslationPayload {
+  const sourceCandidates = buildSourceCandidates(input, payload);
+
+  return {
+    ...payload,
+    translations: payload.translations.map((item) => {
+      const directTranslation =
+        payload.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(item.directTranslation, sourceCandidates)
+          ? ""
+          : item.directTranslation;
+      const directKey = normalizeComparableWord(directTranslation);
+      const similarWords = item.similarWords
+        .filter((word) => !isSourceLikeTargetWord(word, sourceCandidates))
+        .filter((word) => normalizeComparableWord(word) !== directKey)
+        .slice(0, WORD_TARGET_SIMILAR_LIMIT);
+
+      return {
+        ...item,
+        directTranslation,
+        similarWords
+      };
+    })
   };
 }
 
@@ -331,6 +451,7 @@ function hasMeaningfulWordPayload(payload: TranslationPayload): boolean {
     Boolean(payload.sourcePhonetic) ||
     Boolean(payload.correctedSourceWord) ||
     Boolean(payload.sourceLemma) ||
+    Boolean(payload.sourcePluralForm) ||
     Boolean(payload.sourceMorphology) ||
     (payload.sourcePartOfSpeech ?? "unknown") !== "unknown" ||
     (payload.sourceGenderHints?.length ?? 0) > 0;
@@ -350,6 +471,7 @@ function createEmptyWordPayload(input: TranslateInput): TranslationPayload {
     correctedSourceWord: "",
     sourcePartOfSpeech: "unknown",
     sourceLemma: "",
+    sourcePluralForm: "",
     sourceMorphology: "",
     sourceGenderHints: [],
     translations: input.targetLanguages.map((targetLanguage) => ({
@@ -416,6 +538,7 @@ function normalizePayloadFromCsv(csv: string, input: TranslateInput): Translatio
     correctedSourceWord: metaMap.get("correctedsourceword") ?? "",
     sourcePartOfSpeech,
     sourceLemma: metaMap.get("sourcelemma") ?? "",
+    sourcePluralForm: metaMap.get("sourcepluralform") ?? "",
     sourceMorphology: metaMap.get("sourcemorphology") ?? "",
     sourceGenderHints: shouldShowGender ? normalizeGenderHints(rawGenderHints) : [],
     translations: input.targetLanguages.map((targetLanguage) => {
@@ -487,6 +610,7 @@ function normalizePayloadFromMarkdownTable(table: string, input: TranslateInput)
     correctedSourceWord: metaMap.get("correctedsourceword") ?? "",
     sourcePartOfSpeech,
     sourceLemma: metaMap.get("sourcelemma") ?? "",
+    sourcePluralForm: metaMap.get("sourcepluralform") ?? "",
     sourceMorphology: metaMap.get("sourcemorphology") ?? "",
     sourceGenderHints: shouldShowGender ? normalizeGenderHints(rawGenderHints) : [],
     translations: input.targetLanguages.map((targetLanguage) => {
@@ -611,75 +735,104 @@ function normalizeTextPayloadFromCsv(csv: string, input: TranslateTextInput): Te
 }
 
 async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<TranslationPayload> {
-  const systemPrompt =
-    "You are a multilingual dictionary assistant. Return strict JSON only.";
-  const baseUserPrompt =
-    `Translate this source word: "${input.sourceWord}"\n` +
-    `Source language code: ${input.sourceLanguage}\n` +
-    `Target language codes: ${input.targetLanguages.join(", ")}\n` +
-    "Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):\n" +
-    "{\n" +
-    '  "sourcePhonetic": string,\n' +
-    '  "correctedSourceWord": string,\n' +
-    '  "sourcePartOfSpeech": "noun" | "verb" | "adjective" | "adverb" | "pronoun" | "preposition" | "conjunction" | "interjection" | "numeral" | "particle" | "determiner" | "unknown",\n' +
-    '  "sourceLemma": string,\n' +
-    '  "sourceMorphology": string,\n' +
-    '  "sourceGenderHints": [{ "gender": "masculine" | "feminine" | "neuter", "article": string, "word": string }],\n' +
-    '  "translations": [\n' +
-    '    {\n' +
-    '      "targetLanguage": string,\n' +
-    '      "directTranslation": string,\n' +
-    '      "similarWords": [string, string, string]\n' +
-    "    }\n" +
-    "  ]\n" +
-    "}\n" +
-    "Rules:\n" +
-    "- Analyze the source token strictly within the provided source language only; ignore homographs from other languages.\n" +
-    "- Example: when source language is de, token \"die\" is a determiner/article, not an English verb.\n" +
-    "- sourceLemma should be dictionary base form; if input is inflected, return lemma.\n" +
-    "- correctedSourceWord should be empty if input spelling is already correct.\n" +
-    "- sourceMorphology should briefly describe inflection/morphology; if none, keep empty.\n" +
-    "- sourceGenderHints must be empty unless sourcePartOfSpeech is noun and source language has grammatical gender.\n" +
-    "- translations must keep the same order as target language codes.\n" +
-    "- Each translation must return exactly 1 directTranslation and exactly 3 similarWords.\n" +
-    "- similarWords must not duplicate directTranslation.\n";
-  const strictRule = getLanguageWordGuardrail(input.sourceLanguage, input.sourceWord);
-  const strictPromptHint = strictRule
-    ? `- Strict check for this token: in language ${input.sourceLanguage}, "${input.sourceWord}" should be ${strictRule.partOfSpeech}.\n`
-    : "- Strict check: if the token is a cross-language homograph, still classify only by source language.\n";
+  const requestWordPayload = async (requestInput: TranslateInput): Promise<TranslationPayload> => {
+    const systemPrompt =
+      "You are a multilingual dictionary assistant. Return strict JSON only.";
+    const baseUserPrompt =
+      `Translate this source word: "${requestInput.sourceWord}"\n` +
+      `Source language code: ${requestInput.sourceLanguage}\n` +
+      `Target language codes: ${requestInput.targetLanguages.join(", ")}\n` +
+      "Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):\n" +
+      "{\n" +
+      '  "sourcePhonetic": string,\n' +
+      '  "correctedSourceWord": string,\n' +
+      '  "sourcePartOfSpeech": "noun" | "verb" | "adjective" | "adverb" | "pronoun" | "preposition" | "conjunction" | "interjection" | "numeral" | "particle" | "determiner" | "unknown",\n' +
+      '  "sourceLemma": string,\n' +
+      '  "sourcePluralForm": string,\n' +
+      '  "sourceMorphology": string,\n' +
+      '  "sourceGenderHints": [{ "gender": "masculine" | "feminine" | "neuter", "article": string, "word": string }],\n' +
+      '  "translations": [\n' +
+      '    {\n' +
+      '      "targetLanguage": string,\n' +
+      '      "directTranslation": string,\n' +
+      '      "similarWords": [string]\n' +
+      "    }\n" +
+      "  ]\n" +
+      "}\n" +
+      "Rules:\n" +
+      "- Analyze the source token strictly within the provided source language only; ignore homographs from other languages.\n" +
+      "- Example: when source language is de, token \"die\" is a determiner/article, not an English verb.\n" +
+      "- If the input spelling is wrong, interpret and translate the corrected word, and ensure all metadata refers to that corrected word.\n" +
+      "- sourcePhonetic must match the final valid source word: if correctedSourceWord is non-empty, sourcePhonetic must be for correctedSourceWord; otherwise it must be for the original input.\n" +
+      "- sourceLemma should be dictionary base form; if input is inflected, return lemma.\n" +
+      "- sourcePluralForm must be the noun plural form when sourcePartOfSpeech is noun; otherwise keep it empty.\n" +
+      "- If correctedSourceWord is non-empty, sourceLemma and sourcePluralForm must also refer to the corrected word.\n" +
+      "- correctedSourceWord should be empty if input spelling is already correct.\n" +
+      "- sourceMorphology should briefly describe inflection/morphology; if none, keep empty.\n" +
+      "- sourceGenderHints must be empty unless sourcePartOfSpeech is noun and source language has grammatical gender.\n" +
+      "- translations must keep the same order as target language codes.\n" +
+      "- Every directTranslation and every similarWords entry must be a valid lexical item in its target language only.\n" +
+      "- Never copy source-language words, source lemmas, or source plural forms into another target language unless that spelling is genuinely standard in the target language.\n" +
+      "- Return 1 reliable directTranslation and up to 3 reliable similarWords for each target language.\n" +
+      "- If you are unsure, prefer fewer items instead of guessing or mixing languages.\n" +
+      "- similarWords must not duplicate directTranslation.\n";
+    const strictRule = getLanguageWordGuardrail(requestInput.sourceLanguage, requestInput.sourceWord);
+    const strictPromptHint = strictRule
+      ? `- Strict check for this token: in language ${requestInput.sourceLanguage}, "${requestInput.sourceWord}" should be ${strictRule.partOfSpeech}.\n`
+      : "- Strict check: if the token is a cross-language homograph, still classify only by source language.\n";
 
-  const content = await requestOpenAIContent({
-    apiKey,
-    systemPrompt,
-    userPrompt: baseUserPrompt,
-    maxTokens: OPENAI_MAX_TOKENS,
-    logLabel: "openai:word"
-  });
-
-  let payload = parseWordPayloadFlexible(content, input);
-  const needsRetry = !hasMeaningfulWordPayload(payload) || hasLanguageGuardrailConflict(input, payload);
-
-  if (needsRetry) {
-    const retryContent = await requestOpenAIContent({
+    const content = await requestOpenAIContent({
       apiKey,
       systemPrompt,
-      userPrompt:
-        `${baseUserPrompt}\n` +
-        "Validation pass:\n" +
-        strictPromptHint +
-        "- Validate part-of-speech and lemma strictly in the source language context.\n" +
-        "- Return valid JSON only.\n",
+      userPrompt: baseUserPrompt,
       maxTokens: OPENAI_MAX_TOKENS,
-      logLabel: "openai:word-retry"
+      logLabel: "openai:word"
     });
 
-    const retryPayload = parseWordPayloadFlexible(retryContent, input);
-    if (hasMeaningfulWordPayload(retryPayload)) {
-      payload = retryPayload;
+    let payload = parseWordPayloadFlexible(content, requestInput);
+    const needsRetry =
+      !hasMeaningfulWordPayload(payload) ||
+      hasLanguageGuardrailConflict(requestInput, payload) ||
+      hasSuspiciousTargetLanguageLeakage(requestInput, payload);
+
+    if (needsRetry) {
+      const retryContent = await requestOpenAIContent({
+        apiKey,
+        systemPrompt,
+        userPrompt:
+          `${baseUserPrompt}\n` +
+          "Validation pass:\n" +
+          strictPromptHint +
+          "- Ensure sourcePhonetic matches the final valid source word after any spelling correction.\n" +
+          "- Ensure noun entries include sourcePluralForm, and it refers to the final valid source word after any spelling correction.\n" +
+          "- Reject cross-language leakage in directTranslation and similarWords.\n" +
+          "- Validate part-of-speech and lemma strictly in the source language context.\n" +
+          "- Return valid JSON only.\n",
+        maxTokens: OPENAI_MAX_TOKENS,
+        logLabel: "openai:word-retry"
+      });
+
+      const retryPayload = parseWordPayloadFlexible(retryContent, requestInput);
+      if (hasMeaningfulWordPayload(retryPayload)) {
+        payload = retryPayload;
+      }
     }
+
+    return sanitizeTranslationsAgainstSource(requestInput, applySourceLanguageOverrides(requestInput, payload));
+  };
+
+  let payload = await requestWordPayload(input);
+
+  if (shouldRefineCorrectedWordPayload(input, payload)) {
+    const correctedWord = payload.correctedSourceWord!.trim();
+    const correctedPayload = await requestWordPayload({
+      ...input,
+      sourceWord: correctedWord
+    });
+    payload = mergeCorrectedWordPayload(payload, correctedPayload);
   }
 
-  return applySourceLanguageOverrides(input, payload);
+  return payload;
 }
 
 export async function translateWithOpenAI(input: TranslateInput): Promise<TranslationPayload> {

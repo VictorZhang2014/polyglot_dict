@@ -24,6 +24,7 @@ export type TranslationPayload = {
   correctedSourceWord?: string;
   sourcePartOfSpeech?: string;
   sourceLemma?: string;
+  sourcePluralForm?: string;
   sourceMorphology?: string;
   sourceGenderHints?: SourceGenderHint[];
   translations: TranslationItem[];

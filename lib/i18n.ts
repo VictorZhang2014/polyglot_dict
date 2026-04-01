@@ -32,6 +32,7 @@ const EN_MESSAGES = {
   "home.meta.pos": "Part of speech: {pos}",
   "home.meta.posWithLemma": "Part of speech: {pos} (lemma: {lemma})",
   "home.meta.lemma": "Lemma: {lemma}",
+  "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Gender: {gender}",
   "home.meta.genderUnknown": "Gender: unknown",
 
@@ -139,6 +140,7 @@ const ZH_MESSAGES: MessageMap = {
   "home.meta.pos": "词性：{pos}",
   "home.meta.posWithLemma": "词性：{pos}（原形：{lemma}）",
   "home.meta.lemma": "原形：{lemma}",
+  "home.meta.plural": "复数：{plural}",
   "home.meta.gender": "性别：{gender}",
   "home.meta.genderUnknown": "性别：未知",
 
@@ -240,6 +242,7 @@ const DE_MESSAGES: MessageMap = {
   "home.meta.pos": "Wortart: {pos}",
   "home.meta.posWithLemma": "Wortart: {pos} (Lemma: {lemma})",
   "home.meta.lemma": "Lemma: {lemma}",
+  "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Genus: {gender}",
   "home.meta.genderUnknown": "Genus: unbekannt",
 
@@ -333,6 +336,7 @@ const FR_MESSAGES: MessageMap = {
   "home.meta.pos": "Classe grammaticale : {pos}",
   "home.meta.posWithLemma": "Classe grammaticale : {pos} (lemme : {lemma})",
   "home.meta.lemma": "Lemme : {lemma}",
+  "home.meta.plural": "Pluriel : {plural}",
   "home.meta.gender": "Genre : {gender}",
   "home.meta.genderUnknown": "Genre : inconnu",
 
@@ -426,6 +430,7 @@ const ES_MESSAGES: MessageMap = {
   "home.meta.pos": "Categoría gramatical: {pos}",
   "home.meta.posWithLemma": "Categoría gramatical: {pos} (lema: {lemma})",
   "home.meta.lemma": "Lema: {lemma}",
+  "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Género: {gender}",
   "home.meta.genderUnknown": "Género: desconocido",
 
@@ -519,6 +524,7 @@ const IT_MESSAGES: MessageMap = {
   "home.meta.pos": "Parte del discorso: {pos}",
   "home.meta.posWithLemma": "Parte del discorso: {pos} (lemma: {lemma})",
   "home.meta.lemma": "Lemma: {lemma}",
+  "home.meta.plural": "Plurale: {plural}",
   "home.meta.gender": "Genere: {gender}",
   "home.meta.genderUnknown": "Genere: sconosciuto",
 
@@ -612,6 +618,7 @@ const PT_MESSAGES: MessageMap = {
   "home.meta.pos": "Classe gramatical: {pos}",
   "home.meta.posWithLemma": "Classe gramatical: {pos} (lema: {lemma})",
   "home.meta.lemma": "Lema: {lemma}",
+  "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Gênero: {gender}",
   "home.meta.genderUnknown": "Gênero: desconhecido",
 
@@ -705,6 +712,7 @@ const JA_MESSAGES: MessageMap = {
   "home.meta.pos": "品詞: {pos}",
   "home.meta.posWithLemma": "品詞: {pos}（原形: {lemma}）",
   "home.meta.lemma": "原形: {lemma}",
+  "home.meta.plural": "複数形: {plural}",
   "home.meta.gender": "性: {gender}",
   "home.meta.genderUnknown": "性: 不明",
 
@@ -798,6 +806,7 @@ const KO_MESSAGES: MessageMap = {
   "home.meta.pos": "품사: {pos}",
   "home.meta.posWithLemma": "품사: {pos} (원형: {lemma})",
   "home.meta.lemma": "원형: {lemma}",
+  "home.meta.plural": "복수형: {plural}",
   "home.meta.gender": "성: {gender}",
   "home.meta.genderUnknown": "성: 알 수 없음",
 
@@ -891,6 +900,7 @@ const RU_MESSAGES: MessageMap = {
   "home.meta.pos": "Часть речи: {pos}",
   "home.meta.posWithLemma": "Часть речи: {pos} (лемма: {lemma})",
   "home.meta.lemma": "Лемма: {lemma}",
+  "home.meta.plural": "Множественное число: {plural}",
   "home.meta.gender": "Род: {gender}",
   "home.meta.genderUnknown": "Род: неизвестен",
 
@@ -984,6 +994,7 @@ const AR_MESSAGES: MessageMap = {
   "home.meta.pos": "نوع الكلمة: {pos}",
   "home.meta.posWithLemma": "نوع الكلمة: {pos} (الجذر: {lemma})",
   "home.meta.lemma": "الجذر: {lemma}",
+  "home.meta.plural": "صيغة الجمع: {plural}",
   "home.meta.gender": "الجنس: {gender}",
   "home.meta.genderUnknown": "الجنس: غير معروف",
 
