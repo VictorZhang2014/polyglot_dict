@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
 const OPENAI_TIMEOUT_MS = Number.parseInt(process.env.OPENAI_TIMEOUT_MS ?? "12000", 10);
+const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL ?? "https://api.openai.com/v1/chat/completions";
 
 type CheckError = {
   name: string;
@@ -54,7 +55,7 @@ async function checkOpenAiConnectivity(): Promise<ServiceCheck> {
   const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(OPENAI_API_BASE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

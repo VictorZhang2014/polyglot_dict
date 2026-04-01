@@ -19,11 +19,90 @@ type TranslateTextInput = {
 };
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL ?? "https://api.openai.com/v1/chat/completions";
 const OPENAI_MAX_TOKENS = Number.parseInt(process.env.OPENAI_MAX_TOKENS ?? "320", 10);
 const OPENAI_TEXT_MAX_TOKENS = Number.parseInt(process.env.OPENAI_TEXT_MAX_TOKENS ?? "520", 10);
 const OPENAI_TIMEOUT_MS = Number.parseInt(process.env.OPENAI_TIMEOUT_MS ?? "12000", 10);
 const GENDERED_LANGUAGE_CODES = new Set(["de", "fr", "es", "it", "pt", "ru", "ar"]);
 const WORD_TARGET_SIMILAR_LIMIT = 3;
+const WORD_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return strict JSON only.";
+const WORD_PROMPT_RESPONSE_SCHEMA = `Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):
+{
+  "sourcePhonetic": string,
+  "correctedSourceWord": string,
+  "sourcePartOfSpeech": "noun" | "verb" | "adjective" | "adverb" | "pronoun" | "preposition" | "conjunction" | "interjection" | "numeral" | "particle" | "determiner" | "unknown",
+  "sourceLemma": string,
+  "sourcePluralForm": string,
+  "sourceMorphology": string,
+  "sourceGenderHints": [{ "gender": "masculine" | "feminine" | "neuter", "article": string, "word": string }],
+  "translations": [
+    {
+      "targetLanguage": string,
+      "directTranslation": string,
+      "similarWords": [string]
+    }
+  ]
+}`;
+const WORD_PROMPT_RULES = `Rules:
+- Analyze the source token strictly within the provided source language only; ignore homographs from other languages.
+- Example: when source language is de, token "die" is a determiner/article, not an English verb.
+- If the input spelling is wrong, interpret and translate the corrected word, and ensure all metadata refers to that corrected word.
+- sourcePhonetic must match the final valid source word: if correctedSourceWord is non-empty, sourcePhonetic must be for correctedSourceWord; otherwise it must be for the original input.
+- sourceLemma should be dictionary base form; if input is inflected, return lemma.
+- sourcePluralForm must be the noun plural form when sourcePartOfSpeech is noun; otherwise keep it empty.
+- If correctedSourceWord is non-empty, sourceLemma and sourcePluralForm must also refer to the corrected word.
+- correctedSourceWord should be empty if input spelling is already correct.
+- sourceMorphology should briefly describe inflection/morphology; if none, keep empty.
+- sourceGenderHints must be empty unless sourcePartOfSpeech is noun and source language has grammatical gender.
+- translations must keep the same order as target language codes.
+- Every directTranslation and every similarWords entry must be a valid lexical item in its target language only.
+- Never copy source-language words, source lemmas, or source plural forms into another target language unless that spelling is genuinely standard in the target language.
+- Return 1 reliable directTranslation and up to 3 reliable similarWords for each target language.
+- If you are unsure, prefer fewer items instead of guessing or mixing languages.
+- similarWords must not duplicate directTranslation.`;
+const WORD_RETRY_RULES = `- Ensure sourcePhonetic matches the final valid source word after any spelling correction.
+- Ensure noun entries include sourcePluralForm, and it refers to the final valid source word after any spelling correction.
+- Reject cross-language leakage in directTranslation and similarWords.
+- Validate part-of-speech and lemma strictly in the source language context.
+- Return valid JSON only.`;
+const TEXT_SYSTEM_PROMPT = "You are a multilingual translation assistant. Return strict CSV only.";
+const TEXT_PROMPT_RULES = `Return CSV with header exactly:
+targetLanguage,translatedText
+Rules:
+- No markdown and no code fences.
+- Provide natural and faithful direct translations.
+- Keep punctuation and intent.
+- Keep exactly one CSV row for each target language code, and keep the same order as target language codes.
+- Use RFC4180 CSV escaping. Always quote translatedText with double quotes.
+- If translated text has line breaks, replace each line break with literal \\n.`;
+
+function buildWordUserPrompt(input: TranslateInput): string {
+  return [
+    `Translate this source word: "${input.sourceWord}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    WORD_PROMPT_RESPONSE_SCHEMA,
+    WORD_PROMPT_RULES
+  ].join("\n");
+}
+
+function buildWordRetryPrompt(input: TranslateInput, strictPromptHint: string): string {
+  return [
+    buildWordUserPrompt(input),
+    "Validation pass:",
+    strictPromptHint.trimEnd(),
+    WORD_RETRY_RULES
+  ].join("\n");
+}
+
+function buildTextUserPrompt(input: TranslateTextInput): string {
+  return [
+    `Translate this source text: "${input.sourceText}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    TEXT_PROMPT_RULES
+  ].join("\n");
+}
 
 function supportsGrammaticalGender(code: string): boolean {
   return GENDERED_LANGUAGE_CODES.has(code.trim().toLowerCase());
@@ -654,7 +733,7 @@ async function requestOpenAIContent(params: {
 
   let response: Response;
   try {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
+    response = await fetch(OPENAI_API_BASE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -736,46 +815,7 @@ function normalizeTextPayloadFromCsv(csv: string, input: TranslateTextInput): Te
 
 async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<TranslationPayload> {
   const requestWordPayload = async (requestInput: TranslateInput): Promise<TranslationPayload> => {
-    const systemPrompt =
-      "You are a multilingual dictionary assistant. Return strict JSON only.";
-    const baseUserPrompt =
-      `Translate this source word: "${requestInput.sourceWord}"\n` +
-      `Source language code: ${requestInput.sourceLanguage}\n` +
-      `Target language codes: ${requestInput.targetLanguages.join(", ")}\n` +
-      "Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):\n" +
-      "{\n" +
-      '  "sourcePhonetic": string,\n' +
-      '  "correctedSourceWord": string,\n' +
-      '  "sourcePartOfSpeech": "noun" | "verb" | "adjective" | "adverb" | "pronoun" | "preposition" | "conjunction" | "interjection" | "numeral" | "particle" | "determiner" | "unknown",\n' +
-      '  "sourceLemma": string,\n' +
-      '  "sourcePluralForm": string,\n' +
-      '  "sourceMorphology": string,\n' +
-      '  "sourceGenderHints": [{ "gender": "masculine" | "feminine" | "neuter", "article": string, "word": string }],\n' +
-      '  "translations": [\n' +
-      '    {\n' +
-      '      "targetLanguage": string,\n' +
-      '      "directTranslation": string,\n' +
-      '      "similarWords": [string]\n' +
-      "    }\n" +
-      "  ]\n" +
-      "}\n" +
-      "Rules:\n" +
-      "- Analyze the source token strictly within the provided source language only; ignore homographs from other languages.\n" +
-      "- Example: when source language is de, token \"die\" is a determiner/article, not an English verb.\n" +
-      "- If the input spelling is wrong, interpret and translate the corrected word, and ensure all metadata refers to that corrected word.\n" +
-      "- sourcePhonetic must match the final valid source word: if correctedSourceWord is non-empty, sourcePhonetic must be for correctedSourceWord; otherwise it must be for the original input.\n" +
-      "- sourceLemma should be dictionary base form; if input is inflected, return lemma.\n" +
-      "- sourcePluralForm must be the noun plural form when sourcePartOfSpeech is noun; otherwise keep it empty.\n" +
-      "- If correctedSourceWord is non-empty, sourceLemma and sourcePluralForm must also refer to the corrected word.\n" +
-      "- correctedSourceWord should be empty if input spelling is already correct.\n" +
-      "- sourceMorphology should briefly describe inflection/morphology; if none, keep empty.\n" +
-      "- sourceGenderHints must be empty unless sourcePartOfSpeech is noun and source language has grammatical gender.\n" +
-      "- translations must keep the same order as target language codes.\n" +
-      "- Every directTranslation and every similarWords entry must be a valid lexical item in its target language only.\n" +
-      "- Never copy source-language words, source lemmas, or source plural forms into another target language unless that spelling is genuinely standard in the target language.\n" +
-      "- Return 1 reliable directTranslation and up to 3 reliable similarWords for each target language.\n" +
-      "- If you are unsure, prefer fewer items instead of guessing or mixing languages.\n" +
-      "- similarWords must not duplicate directTranslation.\n";
+    const baseUserPrompt = buildWordUserPrompt(requestInput);
     const strictRule = getLanguageWordGuardrail(requestInput.sourceLanguage, requestInput.sourceWord);
     const strictPromptHint = strictRule
       ? `- Strict check for this token: in language ${requestInput.sourceLanguage}, "${requestInput.sourceWord}" should be ${strictRule.partOfSpeech}.\n`
@@ -783,7 +823,7 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
 
     const content = await requestOpenAIContent({
       apiKey,
-      systemPrompt,
+      systemPrompt: WORD_SYSTEM_PROMPT,
       userPrompt: baseUserPrompt,
       maxTokens: OPENAI_MAX_TOKENS,
       logLabel: "openai:word"
@@ -798,16 +838,8 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
     if (needsRetry) {
       const retryContent = await requestOpenAIContent({
         apiKey,
-        systemPrompt,
-        userPrompt:
-          `${baseUserPrompt}\n` +
-          "Validation pass:\n" +
-          strictPromptHint +
-          "- Ensure sourcePhonetic matches the final valid source word after any spelling correction.\n" +
-          "- Ensure noun entries include sourcePluralForm, and it refers to the final valid source word after any spelling correction.\n" +
-          "- Reject cross-language leakage in directTranslation and similarWords.\n" +
-          "- Validate part-of-speech and lemma strictly in the source language context.\n" +
-          "- Return valid JSON only.\n",
+        systemPrompt: WORD_SYSTEM_PROMPT,
+        userPrompt: buildWordRetryPrompt(requestInput, strictPromptHint),
         maxTokens: OPENAI_MAX_TOKENS,
         logLabel: "openai:word-retry"
       });
@@ -850,25 +882,10 @@ export async function translateTextWithOpenAI(input: TranslateTextInput): Promis
     throw new Error("OPENAI_API_KEY is missing");
   }
 
-  const systemPrompt = "You are a multilingual translation assistant. Return strict CSV only.";
-  const userPrompt =
-    `Translate this source text: "${input.sourceText}"\n` +
-    `Source language code: ${input.sourceLanguage}\n` +
-    `Target language codes: ${input.targetLanguages.join(", ")}\n` +
-    "Return CSV with header exactly:\n" +
-    "targetLanguage,translatedText\n" +
-    "Rules:\n" +
-    "- No markdown and no code fences.\n" +
-    "- Provide natural and faithful direct translations.\n" +
-    "- Keep punctuation and intent.\n" +
-    "- Keep exactly one CSV row for each target language code, and keep the same order as target language codes.\n" +
-    "- Use RFC4180 CSV escaping. Always quote translatedText with double quotes.\n" +
-    "- If translated text has line breaks, replace each line break with literal \\n.\n";
-
   const content = await requestOpenAIContent({
     apiKey,
-    systemPrompt,
-    userPrompt,
+    systemPrompt: TEXT_SYSTEM_PROMPT,
+    userPrompt: buildTextUserPrompt(input),
     maxTokens: OPENAI_TEXT_MAX_TOKENS,
     logLabel: "openai:text"
   });
