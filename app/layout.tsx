@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "@radix-ui/themes/styles.css";
 import { PwaRegister } from "@/components/pwa-register";
 import { AppShell } from "@/components/app-shell";
+import { DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS, DEFAULT_TITLE, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const THEME_BOOTSTRAP_SCRIPT = `
@@ -32,8 +33,52 @@ const THEME_BOOTSTRAP_SCRIPT = `
 `;
 
 export const metadata: Metadata = {
-  title: "ParlerAI - Polyglot Dictionary",
-  description: "ParlerAI multilingual dictionary and translator powered by OpenAI",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: `${SITE_NAME} - ${DEFAULT_TITLE}`,
+    template: `%s | ${SITE_NAME}`
+  },
+  description: DEFAULT_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: DEFAULT_KEYWORDS,
+  authors: [{ name: SITE_NAME }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  category: "education",
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} - ${DEFAULT_TITLE}`,
+    description: DEFAULT_DESCRIPTION,
+    locale: "en_US"
+  },
+  twitter: {
+    card: "summary",
+    title: `${SITE_NAME} - ${DEFAULT_TITLE}`,
+    description: DEFAULT_DESCRIPTION
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1
+    }
+  },
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    telephone: false,
+    date: false,
+    address: false,
+    email: false
+  },
   manifest: "/manifest.webmanifest",
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   themeColor: [
