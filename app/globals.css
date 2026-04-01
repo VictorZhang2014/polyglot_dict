@@ -404,6 +404,10 @@ a {
   line-height: 1.3;
 }
 
+.translation-source-field {
+  position: relative;
+}
+
 .translation-source-area,
 .translation-target-area {
   resize: none;
@@ -412,6 +416,10 @@ a {
   border: 0 !important;
   box-shadow: none !important;
   outline: none !important;
+}
+
+.translation-source-area {
+  padding-right: 52px !important;
 }
 
 .translation-target-area {
@@ -440,4 +448,17 @@ textarea.translation-target-area {
 
 .translation-audio-btn {
   color: var(--app-translation-audio) !important;
+}
+
+.translation-source-play-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-width: 32px !important;
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  color: var(--app-translation-audio) !important;
+  z-index: 1;
 }

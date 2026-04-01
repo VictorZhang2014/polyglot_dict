@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { InfoCircledIcon, SpeakerLoudIcon } from "@radix-ui/react-icons";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DiscIcon, InfoCircledIcon, SpeakerLoudIcon, StopIcon } from "@radix-ui/react-icons";
 import { Badge, Button, Callout, Card, Flex, Grid, Heading, Select, Text, TextArea } from "@radix-ui/themes";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
 import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/settings-storage";
@@ -47,6 +47,27 @@ function resolveSpeechLang(code: string): string {
   return SPEECH_LANG_MAP[code] ?? code;
 }
 
+function resolveRecordingMimeType(): string {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+    return "";
+  }
+
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+function resolveRecordingExtension(mimeType: string): string {
+  if (mimeType.includes("mp4")) {
+    return "mp4";
+  }
+  if (mimeType.includes("ogg")) {
+    return "ogg";
+  }
+  return "webm";
+}
+
+type RecordingState = "idle" | "recording" | "transcribing";
+
 export default function TranslatePage() {
   const { t } = useI18n();
   const [sourceLanguage, setSourceLanguage] = useState("de");
@@ -56,11 +77,24 @@ export default function TranslatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [response, setResponse] = useState<TranslateTextApiResponse | null>(null);
+  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     const settings = readSettings();
     setTargetLanguages(settings.targetLanguages);
     setCustomLanguages(settings.customLanguages);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const languageOptions = useMemo(() => getAllLanguageOptions(customLanguages), [customLanguages]);
@@ -74,6 +108,7 @@ export default function TranslatePage() {
     () => new Map(response?.data.translations.map((item) => [item.targetLanguage, item.translatedText]) ?? []),
     [response]
   );
+  const showSourcePlayButton = Boolean(sourceText.trim());
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -160,6 +195,113 @@ export default function TranslatePage() {
     window.speechSynthesis.speak(utterance);
   };
 
+  const transcribeAudio = async (blob: Blob) => {
+    const formData = new FormData();
+    const mimeType = blob.type || "audio/webm";
+    const extension = resolveRecordingExtension(mimeType);
+    formData.append("file", blob, `recording.${extension}`);
+    formData.append("sourceLanguage", sourceLanguage);
+
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData
+    });
+
+    const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+    const isJson = contentType.includes("application/json");
+    const data = (isJson ? await res.json() : null) as { text?: string; error?: string } | null;
+
+    if (!res.ok) {
+      throw new Error(data?.error || t("translate.error.transcribeFailed"));
+    }
+
+    const transcript = data?.text?.trim() ?? "";
+    if (!transcript) {
+      throw new Error(t("translate.error.transcribeFailed"));
+    }
+
+    setSourceText(transcript);
+    setResponse(null);
+    setError("");
+  };
+
+  const handleStartRecording = async () => {
+    if (
+      typeof window === "undefined" ||
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setError(t("translate.error.recordUnavailable"));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = resolveRecordingMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      audioChunksRef.current = [];
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        setRecordingState("idle");
+        setError(t("translate.error.transcribeFailed"));
+      };
+
+      recorder.onstop = async () => {
+        const recordedMimeType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: recordedMimeType });
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+
+        if (blob.size === 0) {
+          setRecordingState("idle");
+          return;
+        }
+
+        setRecordingState("transcribing");
+
+        try {
+          await transcribeAudio(blob);
+        } catch (transcribeError) {
+          setError(transcribeError instanceof Error ? transcribeError.message : t("translate.error.transcribeFailed"));
+        } finally {
+          setRecordingState("idle");
+        }
+      };
+
+      setError("");
+      setResponse(null);
+      recorder.start();
+      setRecordingState("recording");
+    } catch (recordError) {
+      setError(recordError instanceof Error ? recordError.message : t("translate.error.recordUnavailable"));
+      setRecordingState("idle");
+    }
+  };
+
+  const handleRecordToggle = async () => {
+    if (recordingState === "transcribing") {
+      return;
+    }
+
+    if (recordingState === "recording") {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    await handleStartRecording();
+  };
+
   return (
     <Flex direction="column" gap="4">
       <Card>
@@ -186,27 +328,52 @@ export default function TranslatePage() {
               </Select.Root>
             </Flex>
 
-            <TextArea
-              rows={3}
-              className="translation-source-area"
-              maxLength={300}
-              placeholder={t("translate.sourcePlaceholder")}
-              value={sourceText}
-              onChange={(event) => setSourceText(event.target.value)}
-            />
+            <div className="translation-source-field">
+              <TextArea
+                rows={3}
+                className="translation-source-area"
+                maxLength={300}
+                placeholder={t("translate.sourcePlaceholder")}
+                value={sourceText}
+                onChange={(event) => {
+                  setSourceText(event.target.value);
+                  setResponse(null);
+                }}
+              />
+              {showSourcePlayButton ? (
+                <Button
+                  type="button"
+                  variant="soft"
+                  color="gray"
+                  className="translation-source-play-btn"
+                  onClick={() => speakText(sourceText, sourceLanguage)}
+                  disabled={!sourceText.trim()}
+                  aria-label={t("translate.sourcePlay")}
+                  title={t("translate.sourcePlay")}
+                >
+                  <SpeakerLoudIcon />
+                </Button>
+              ) : null}
+            </div>
 
             <Flex align="center" justify="between" gap="3" wrap="wrap">
-              <Button
-                type="button"
-                variant="soft"
-                color="gray"
-                className="translation-audio-btn"
-                onClick={() => speakText(sourceText, sourceLanguage)}
-                disabled={!sourceText.trim()}
-              >
-                <SpeakerLoudIcon />
-                {t("translate.sourcePlay")}
-              </Button>
+              <Flex align="center" gap="2" wrap="wrap">
+                <Button
+                  type="button"
+                  variant="soft"
+                  color={recordingState === "recording" ? "red" : "gray"}
+                  className="translation-audio-btn"
+                  onClick={() => void handleRecordToggle()}
+                  disabled={loading || recordingState === "transcribing"}
+                >
+                  {recordingState === "recording" ? <StopIcon /> : <DiscIcon />}
+                  {recordingState === "recording"
+                    ? t("translate.recordStop")
+                    : recordingState === "transcribing"
+                      ? t("translate.transcribing")
+                      : t("translate.recordStart")}
+                </Button>
+              </Flex>
               <Button type="submit" color="gray" className="translation-submit-btn" disabled={loading}>
                 {loading ? <span className="query-btn-spinner" aria-hidden="true" /> : t("translate.submit")}
               </Button>
