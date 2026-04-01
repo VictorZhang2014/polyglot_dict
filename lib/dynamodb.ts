@@ -42,10 +42,11 @@ export async function getCachedTranslation(cacheKey: string) {
 
 export async function cacheTranslation(
   cacheKey: string,
-  sourceWord: string,
+  source: string,
   sourceLanguage: string,
   targetLanguages: string[],
-  data: any
+  data: any,
+  mode: "word" | "text" = "word"
 ) {
   const tableName = process.env.AI_DYNAMODB_TABLE_NAME;
   if (!tableName) return;
@@ -56,11 +57,12 @@ export async function cacheTranslation(
         TableName: tableName,
         Item: {
           id: cacheKey,
-          sourceWord,
+          ...(mode === "text" ? { sourceText: source } : { sourceWord: source }),
           sourceLanguage,
           targetLanguages,
           data,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          mode
         }
       })
     );
