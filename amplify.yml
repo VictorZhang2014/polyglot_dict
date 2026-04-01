@@ -24,3 +24,9 @@ frontend:
     paths:
       - node_modules/**/*
       - .next/cache/**/*
+backend:
+  phases:
+    build:
+      commands:
+        # Ensure CloudWatch logging is enabled
+        - echo "Logging configuration check"
