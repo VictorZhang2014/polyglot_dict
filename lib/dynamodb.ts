@@ -1,13 +1,30 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-// Create a persistent client connection
+const region = process.env.AI_AWS_REGION || "eu-central-1";
+const accessKeyId = process.env.AI_AWS_ACCESS_KEY_ID?.trim() ?? "";
+const secretAccessKey = process.env.AI_AWS_SECRET_ACCESS_KEY?.trim() ?? "";
+const sessionToken = process.env.AI_AWS_SESSION_TOKEN?.trim() ?? "";
+const hasStaticCredentials = Boolean(accessKeyId && secretAccessKey);
+
+if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
+  console.warn(
+    "[dynamodb] Incomplete static AWS credentials detected. Falling back to the default AWS credential provider chain."
+  );
+}
+
+// Let the AWS SDK use the runtime credential chain unless both static credential fields are present.
 const client = new DynamoDBClient({
-  region: process.env.AI_AWS_REGION || "eu-central-1",
-  credentials: {
-    accessKeyId: process.env.AI_AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AI_AWS_SECRET_ACCESS_KEY || ""
-  }
+  region,
+  ...(hasStaticCredentials
+    ? {
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+          ...(sessionToken ? { sessionToken } : {})
+        }
+      }
+    : {})
 });
 
 // Configure document client
