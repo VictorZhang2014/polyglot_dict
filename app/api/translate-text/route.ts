@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { translateTextWithOpenAI } from "@/lib/openai-translate";
-import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
+import { resolveApiErrorStatus, toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 
@@ -127,12 +127,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = toEnglishApiErrorMessage(error);
+    const status = resolveApiErrorStatus(error);
+    console.error("[translate:text] Request failed:", error);
 
     return NextResponse.json(
       {
         error: message
       },
-      { status: 400 }
+      { status }
     );
   }
 }

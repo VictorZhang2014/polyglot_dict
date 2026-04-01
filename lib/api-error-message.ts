@@ -33,3 +33,20 @@ export function toEnglishApiErrorMessage(error: unknown): string {
 
   return message;
 }
+
+export function resolveApiErrorStatus(error: unknown): number {
+  const message = toEnglishApiErrorMessage(error);
+
+  if (message === "OPENAI_API_KEY is missing") {
+    return 503;
+  }
+
+  if (
+    message.includes("timed out") ||
+    message.includes("request time budget was exhausted")
+  ) {
+    return 504;
+  }
+
+  return 400;
+}
