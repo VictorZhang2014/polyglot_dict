@@ -71,7 +71,7 @@ const EN_MESSAGES = {
   "settings.themeOptionSystem": "Follow system",
   "settings.themeOptionLight": "Light",
   "settings.themeOptionDark": "Dark",
-  "settings.contact": "Contact us",
+  "settings.contact": "I want to give feedback",
   "settings.contactCopied": "Email copied",
   "settings.privacyPolicy": "Privacy Policy",
   "settings.userAgreement": "User Agreement",
@@ -185,7 +185,7 @@ const ZH_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "跟随系统",
   "settings.themeOptionLight": "浅色",
   "settings.themeOptionDark": "深色",
-  "settings.contact": "联系我们",
+  "settings.contact": "我想反馈问题",
   "settings.contactCopied": "邮箱已复制",
   "settings.privacyPolicy": "隐私政策",
   "settings.userAgreement": "用户协议",
@@ -293,7 +293,7 @@ const DE_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "System folgen",
   "settings.themeOptionLight": "Hell",
   "settings.themeOptionDark": "Dunkel",
-  "settings.contact": "Kontakt",
+  "settings.contact": "Ich möchte Feedback geben",
   "settings.saved": "Einstellungen gespeichert",
   "gdpr.title": "Datenschutz & Cookies",
   "gdpr.description":
@@ -393,7 +393,7 @@ const FR_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "Suivre le système",
   "settings.themeOptionLight": "Clair",
   "settings.themeOptionDark": "Sombre",
-  "settings.contact": "Nous contacter",
+  "settings.contact": "Je veux donner mon avis",
   "settings.saved": "Paramètres enregistrés",
   "gdpr.title": "Confidentialité et cookies",
   "gdpr.description":
@@ -493,7 +493,7 @@ const ES_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "Seguir sistema",
   "settings.themeOptionLight": "Claro",
   "settings.themeOptionDark": "Oscuro",
-  "settings.contact": "Contáctanos",
+  "settings.contact": "Quiero dar mi opinión",
   "settings.saved": "Configuración guardada",
   "gdpr.title": "Privacidad y cookies",
   "gdpr.description":
@@ -593,7 +593,7 @@ const IT_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "Segui sistema",
   "settings.themeOptionLight": "Chiaro",
   "settings.themeOptionDark": "Scuro",
-  "settings.contact": "Contattaci",
+  "settings.contact": "Voglio inviare un feedback",
   "settings.saved": "Impostazioni salvate",
   "gdpr.title": "Privacy e cookie",
   "gdpr.description":
@@ -693,7 +693,7 @@ const PT_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "Seguir sistema",
   "settings.themeOptionLight": "Claro",
   "settings.themeOptionDark": "Escuro",
-  "settings.contact": "Contato",
+  "settings.contact": "Quero enviar feedback",
   "settings.saved": "Configurações salvas",
   "gdpr.title": "Privacidade e cookies",
   "gdpr.description":
@@ -793,7 +793,7 @@ const JA_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "システムに従う",
   "settings.themeOptionLight": "ライト",
   "settings.themeOptionDark": "ダーク",
-  "settings.contact": "お問い合わせ",
+  "settings.contact": "フィードバックを送りたい",
   "settings.saved": "設定を保存しました",
   "gdpr.title": "プライバシーとCookie",
   "gdpr.description":
@@ -893,7 +893,7 @@ const KO_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "시스템 따르기",
   "settings.themeOptionLight": "라이트",
   "settings.themeOptionDark": "다크",
-  "settings.contact": "문의하기",
+  "settings.contact": "피드백을 보내고 싶어요",
   "settings.saved": "설정이 저장되었습니다",
   "gdpr.title": "개인정보 및 쿠키",
   "gdpr.description":
@@ -993,7 +993,7 @@ const RU_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "По системе",
   "settings.themeOptionLight": "Светлая",
   "settings.themeOptionDark": "Тёмная",
-  "settings.contact": "Связаться с нами",
+  "settings.contact": "Я хочу оставить отзыв",
   "settings.saved": "Настройки сохранены",
   "gdpr.title": "Конфиденциальность и cookie",
   "gdpr.description":
@@ -1093,7 +1093,7 @@ const AR_MESSAGES: MessageMap = {
   "settings.themeOptionSystem": "اتباع النظام",
   "settings.themeOptionLight": "فاتح",
   "settings.themeOptionDark": "داكن",
-  "settings.contact": "تواصل معنا",
+  "settings.contact": "أريد إرسال ملاحظات",
   "settings.saved": "تم حفظ الإعدادات",
   "gdpr.title": "الخصوصية وملفات تعريف الارتباط",
   "gdpr.description":
