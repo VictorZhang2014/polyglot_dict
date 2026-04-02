@@ -991,28 +991,28 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
     });
 
     let payload = parseWordPayloadFlexible(content, requestInput);
-    const needsRetry =
-      !hasMeaningfulWordPayload(payload) ||
-      hasLanguageGuardrailConflict(requestInput, payload) ||
-      hasSuspiciousTargetLanguageLeakage(requestInput, payload);
+    // const needsRetry =
+    //   !hasMeaningfulWordPayload(payload) ||
+    //   hasLanguageGuardrailConflict(requestInput, payload) ||
+    //   hasSuspiciousTargetLanguageLeakage(requestInput, payload);
 
-    if (needsRetry && hasBudgetForFollowup(budget)) {
-      const retryContent = await requestOpenAIContent({
-        apiKey,
-        systemPrompt: WORD_SYSTEM_PROMPT,
-        userPrompt: buildWordRetryPrompt(requestInput, strictPromptHint),
-        maxTokens: OPENAI_MAX_TOKENS,
-        logLabel: "openai:word-retry",
-        budget
-      });
+    // if (needsRetry && hasBudgetForFollowup(budget)) {
+    //   const retryContent = await requestOpenAIContent({
+    //     apiKey,
+    //     systemPrompt: WORD_SYSTEM_PROMPT,
+    //     userPrompt: buildWordRetryPrompt(requestInput, strictPromptHint),
+    //     maxTokens: OPENAI_MAX_TOKENS,
+    //     logLabel: "openai:word-retry",
+    //     budget
+    //   });
 
-      const retryPayload = parseWordPayloadFlexible(retryContent, requestInput);
-      if (hasMeaningfulWordPayload(retryPayload)) {
-        payload = retryPayload;
-      }
-    } else if (needsRetry) {
-      console.warn("[openai:word] Skipped retry because the remaining request budget is too low.");
-    }
+    //   const retryPayload = parseWordPayloadFlexible(retryContent, requestInput);
+    //   if (hasMeaningfulWordPayload(retryPayload)) {
+    //     payload = retryPayload;
+    //   }
+    // } else if (needsRetry) {
+    //   console.warn("[openai:word] Skipped retry because the remaining request budget is too low.");
+    // }
 
     return sanitizeTranslationsAgainstSource(requestInput, applySourceLanguageOverrides(requestInput, payload));
   };
