@@ -130,25 +130,25 @@ export async function POST(request: Request) {
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);
     const inFlightKey = cacheKey;
-    // const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
-    // if (cachedData && hasSuccessfulTranslation(cachedData)) {
-    //   console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
-    //   return NextResponse.json({
-    //     fromCache: true,
-    //     data: cachedData
-    //   });
-    // }
+    const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
+    if (cachedData && hasSuccessfulTranslation(cachedData)) {
+      console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
+      return NextResponse.json({
+        fromCache: true,
+        data: cachedData
+      });
+    }
 
     const translated = await getOrCreateTranslation(inFlightKey, payload);
-    // if (hasSuccessfulTranslation(translated)) {
-    //   cacheTranslation(
-    //     cacheKey,
-    //     resolveStoredSourceWord(translated, payload.sourceWord),
-    //     payload.sourceLanguage,
-    //     payload.targetLanguages,
-    //     translated
-    //   );
-    // }
+    if (hasSuccessfulTranslation(translated)) {
+      cacheTranslation(
+        cacheKey,
+        resolveStoredSourceWord(translated, payload.sourceWord),
+        payload.sourceLanguage,
+        payload.targetLanguages,
+        translated
+      );
+    }
 
     return NextResponse.json({
       fromCache: false,

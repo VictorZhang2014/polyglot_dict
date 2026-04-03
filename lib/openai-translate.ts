@@ -5,6 +5,7 @@ import {
   TranslationPayload
 } from "@/lib/types";
 import { getLanguageWordGuardrail } from "@/lib/language-guardrails";
+import { createOpenAIClient } from "@/lib/openai-client";
 
 type TranslateInput = {
   sourceWord: string;
@@ -872,33 +873,33 @@ async function requestWordSuggestions(input: TranslateInput, apiKey: string, bud
 
 async function requestOpenAIContent(params: {
   apiKey: string;
+  baseUrl?: string;
   systemPrompt: string;
   userPrompt: string;
   maxTokens: number;
   logLabel: string;
   budget?: RequestBudget;
 }): Promise<string> {
-  const { apiKey, systemPrompt, userPrompt, maxTokens, logLabel, budget } = params;
+  const { apiKey, baseUrl, systemPrompt, userPrompt, maxTokens, logLabel, budget } = params;
   const remainingBudgetMs = getRemainingBudgetMs(budget);
   if (remainingBudgetMs <= 0) {
     throw new Error(`${logLabel} skipped because the request time budget was exhausted`);
   }
 
-  // const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
+  const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
   // const startedAt = performance.now();
+  const client = createOpenAIClient({
+    apiKey,
+    baseUrl,
+    timeoutMs
+  });
   // const controller = new AbortController();
   // const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response: Response;
+  let status = 200;
   try {
-    response = await fetch(OPENAI_API_BASE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      // signal: controller.signal,
-      body: JSON.stringify({
+    const completion = await client.chat.completions.create(
+      {
         model: MODEL,
         temperature: 0,
         max_tokens: maxTokens,
@@ -906,42 +907,45 @@ async function requestOpenAIContent(params: {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ]
-      })
-    });
+      },
+      // {
+      //   signal: controller.signal
+      // }
+    );
+
+    // const elapsed = performance.now() - startedAt;
+    // console.log(`[${logLabel}] model=${MODEL} status=${status} duration=${elapsed.toFixed(2)} ms`);
+
+    const content = completion.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`${logLabel} returned empty content`);
+    }
+
+    return content;
   } catch (error) {
     // const elapsed = performance.now() - startedAt;
-    // if (error instanceof Error && error.name === "AbortError") {
-      // throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
-    // }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
+    }
 
+    const errorStatus =
+      error && typeof error === "object" && "status" in error && typeof error.status === "number"
+        ? error.status
+        : undefined;
+    if (typeof errorStatus === "number") {
+      status = errorStatus;
+    }
+
+    // console.log(`[${logLabel}] model=${MODEL} status=${status} duration=${elapsed.toFixed(2)} ms`);
     throw new Error(
-      `${logLabel} : ${error instanceof Error ? error.message : "Unknown fetch error"}`
+      `${logLabel} : ${error instanceof Error ? error.message : "Unknown SDK error"}`
     );
     // throw new Error(
-    //   `${logLabel} failed after ${elapsed.toFixed(2)} ms: ${error instanceof Error ? error.message : "Unknown fetch error"}`
+    //   `${logLabel} failed after ${elapsed.toFixed(2)} ms: ${error instanceof Error ? error.message : "Unknown SDK error"}`
     // );
   } finally {
     // clearTimeout(timeoutId);
   }
-
-  // const elapsed = performance.now() - startedAt;
-  // console.log(`[${logLabel}] model=${MODEL} status=${response.status} duration=${elapsed.toFixed(2)} ms`);
-
-  const completion = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(completion.error?.message ?? `${logLabel} failed`);
-  }
-
-  const content = completion.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error(`${logLabel} returned empty content`);
-  }
-
-  return content;
 }
 
 function normalizeTextPayloadFromCsv(csv: string, input: TranslateTextInput): TextTranslationPayload {

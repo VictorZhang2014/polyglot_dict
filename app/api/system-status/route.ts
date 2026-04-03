@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createOpenAIClient } from "@/lib/openai-client";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ function serializeError(error: unknown): CheckError {
         name?: unknown;
         message?: unknown;
         code?: unknown;
+        status?: unknown;
         $metadata?: { httpStatusCode?: unknown };
       }
     | null;
@@ -33,7 +35,12 @@ function serializeError(error: unknown): CheckError {
     name: typeof source?.name === "string" ? source.name : "UnknownError",
     message: typeof source?.message === "string" ? source.message : String(error),
     code: typeof source?.code === "string" ? source.code : undefined,
-    status: typeof source?.$metadata?.httpStatusCode === "number" ? source.$metadata.httpStatusCode : undefined
+    status:
+      typeof source?.status === "number"
+        ? source.status
+        : typeof source?.$metadata?.httpStatusCode === "number"
+          ? source.$metadata.httpStatusCode
+          : undefined
   };
 }
 
@@ -53,16 +60,15 @@ async function checkOpenAiConnectivity(): Promise<ServiceCheck> {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  const client = createOpenAIClient({
+    apiKey,
+    baseUrl: OPENAI_API_BASE_URL,
+    timeoutMs: OPENAI_TIMEOUT_MS
+  });
 
   try {
-    const response = await fetch(OPENAI_API_BASE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
+    await client.chat.completions.create(
+      {
         model: OPENAI_MODEL,
         temperature: 0,
         max_tokens: 2,
@@ -70,21 +76,11 @@ async function checkOpenAiConnectivity(): Promise<ServiceCheck> {
           { role: "system", content: "You are a health check assistant. Reply with OK only." },
           { role: "user", content: "OK?" }
         ]
-      })
-    });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
-      return {
-        ok: false,
-        latencyMs: Number((performance.now() - startedAt).toFixed(2)),
-        error: {
-          name: "OpenAIHttpError",
-          message: payload.error?.message || `OpenAI status ${response.status}`,
-          status: response.status
-        }
-      };
-    }
+      },
+      {
+        signal: controller.signal
+      }
+    );
 
     return {
       ok: true,
@@ -92,6 +88,7 @@ async function checkOpenAiConnectivity(): Promise<ServiceCheck> {
     };
   } catch (error) {
     const isAbort = error instanceof Error && error.name === "AbortError";
+    const serialized = serializeError(error);
     return {
       ok: false,
       latencyMs: Number((performance.now() - startedAt).toFixed(2)),
@@ -100,7 +97,10 @@ async function checkOpenAiConnectivity(): Promise<ServiceCheck> {
             name: "TimeoutError",
             message: `OpenAI timed out after ${OPENAI_TIMEOUT_MS} ms`
           }
-        : serializeError(error)
+        : {
+            ...serialized,
+            name: serialized.status ? "OpenAIHttpError" : serialized.name
+          }
     };
   } finally {
     clearTimeout(timeout);

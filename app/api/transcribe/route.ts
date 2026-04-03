@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
+import { createOpenAIClient } from "@/lib/openai-client";
 
 export const runtime = "nodejs";
 
@@ -39,26 +40,27 @@ export async function POST(request: Request) {
     const timeoutId = setTimeout(() => controller.abort(), OPENAI_AUDIO_TIMEOUT_MS);
 
     try {
-      const openAiFormData = new FormData();
-      openAiFormData.append("file", file, file.name || "recording.webm");
-      openAiFormData.append("model", OPENAI_AUDIO_MODEL);
-      if (sourceLanguage) {
-        openAiFormData.append("language", sourceLanguage);
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new Error("OPENAI_API_KEY is missing");
       }
 
-      const response = await fetch(OPENAI_AUDIO_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ""}`
-        },
-        body: openAiFormData,
-        signal: controller.signal
+      const client = createOpenAIClient({
+        apiKey,
+        baseUrl: OPENAI_AUDIO_API_URL,
+        timeoutMs: OPENAI_AUDIO_TIMEOUT_MS
       });
 
-      const payload = (await response.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? "transcription failed");
-      }
+      const payload = await client.audio.transcriptions.create(
+        {
+          file,
+          model: OPENAI_AUDIO_MODEL,
+          ...(sourceLanguage ? { language: sourceLanguage } : {})
+        },
+        {
+          signal: controller.signal
+        }
+      );
 
       return NextResponse.json({
         text: typeof payload.text === "string" ? payload.text.trim() : ""
