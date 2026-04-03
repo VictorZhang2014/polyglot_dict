@@ -884,10 +884,10 @@ async function requestOpenAIContent(params: {
     throw new Error(`${logLabel} skipped because the request time budget was exhausted`);
   }
 
-  const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
-  const startedAt = performance.now();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
+  // const startedAt = performance.now();
+  // const controller = new AbortController();
+  // const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -897,7 +897,7 @@ async function requestOpenAIContent(params: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`
       },
-      signal: controller.signal,
+      // signal: controller.signal,
       body: JSON.stringify({
         model: MODEL,
         temperature: 0,
@@ -909,20 +909,23 @@ async function requestOpenAIContent(params: {
       })
     });
   } catch (error) {
-    const elapsed = performance.now() - startedAt;
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
-    }
+    // const elapsed = performance.now() - startedAt;
+    // if (error instanceof Error && error.name === "AbortError") {
+      // throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
+    // }
 
     throw new Error(
-      `${logLabel} failed after ${elapsed.toFixed(2)} ms: ${error instanceof Error ? error.message : "Unknown fetch error"}`
+      `${logLabel} : ${error instanceof Error ? error.message : "Unknown fetch error"}`
     );
+    // throw new Error(
+    //   `${logLabel} failed after ${elapsed.toFixed(2)} ms: ${error instanceof Error ? error.message : "Unknown fetch error"}`
+    // );
   } finally {
-    clearTimeout(timeoutId);
+    // clearTimeout(timeoutId);
   }
 
-  const elapsed = performance.now() - startedAt;
-  console.log(`[${logLabel}] model=${MODEL} status=${response.status} duration=${elapsed.toFixed(2)} ms`);
+  // const elapsed = performance.now() - startedAt;
+  // console.log(`[${logLabel}] model=${MODEL} status=${response.status} duration=${elapsed.toFixed(2)} ms`);
 
   const completion = (await response.json()) as {
     choices?: Array<{ message?: { content?: string | null } }>;
