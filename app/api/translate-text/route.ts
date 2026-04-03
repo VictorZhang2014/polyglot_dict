@@ -100,26 +100,24 @@ export async function POST(request: Request) {
     const raw = (await request.json()) as TranslateTextRequest;
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceText, payload.sourceLanguage, payload.targetLanguages);
-
-    const cachedData = await getCachedTranslation(cacheKey);
-    if (cachedData) {
-      console.log(`[translate:text] DynamoDB cache hit for: ${cacheKey}`);
-      return NextResponse.json({
-        fromCache: true,
-        data: cachedData
-      });
-    }
+    // const cachedData = await getCachedTranslation(cacheKey);
+    // if (cachedData) {
+    //   console.log(`[translate:text] DynamoDB cache hit for: ${cacheKey}`);
+    //   return NextResponse.json({
+    //     fromCache: true,
+    //     data: cachedData
+    //   });
+    // }
 
     const translated = await getOrCreateTranslation(cacheKey, payload); 
-
-    cacheTranslation(
-      cacheKey,
-      payload.sourceText,
-      payload.sourceLanguage,
-      payload.targetLanguages,
-      translated,
-      "text"
-    );
+    // cacheTranslation(
+    //   cacheKey,
+    //   payload.sourceText,
+    //   payload.sourceLanguage,
+    //   payload.targetLanguages,
+    //   translated,
+    //   "text"
+    // );
 
     return NextResponse.json({
       fromCache: false,
