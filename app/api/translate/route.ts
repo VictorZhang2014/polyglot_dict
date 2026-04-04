@@ -76,8 +76,16 @@ async function getOrCreateTranslation(
   const task = (async () => {
     const translated = await translateWithOpenAI(payload);
     return translated;
-  })().finally(() => {
-    inFlightTranslations.delete(inFlightKey);
+  })()
+  .catch((e) => { 
+      throw new Error(`[translation:task] Failed to translate word ${e instanceof Error && e.message ? `: ${e.message}` : ""}`);
+  })
+  .finally(() => { 
+    try {
+      inFlightTranslations.delete(inFlightKey);
+    } catch (e) { 
+      throw new Error(`[translation:task] Failed to clean up this task ${e instanceof Error && e.message ? `: ${e.message}` : ""}`);
+    }
   });
 
   inFlightTranslations.set(inFlightKey, task);
@@ -115,40 +123,40 @@ function hasSuccessfulTranslation(payload: TranslationPayload): boolean {
 
 export async function POST(request: Request) {
   try {
-    const rateLimit = await checkIpRateLimit(request);
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: rateLimit.message },
-        {
-          status: rateLimit.status,
-          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) }
-        }
-      );
-    }
+    // const rateLimit = await checkIpRateLimit(request);
+    // if (!rateLimit.allowed) {
+    //   return NextResponse.json(
+    //     { error: rateLimit.message },
+    //     {
+    //       status: rateLimit.status,
+    //       headers: { "Retry-After": String(rateLimit.retryAfterSeconds) }
+    //     }
+    //   );
+    // }
 
     const raw = (await request.json()) as TranslateRequest;
     const payload = parseBody(raw);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);
     const inFlightKey = cacheKey;
-    const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
-    if (cachedData && hasSuccessfulTranslation(cachedData)) {
-      console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
-      return NextResponse.json({
-        fromCache: true,
-        data: cachedData
-      });
-    }
+    // const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
+    // if (cachedData && hasSuccessfulTranslation(cachedData)) {
+    //   console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
+    //   return NextResponse.json({
+    //     fromCache: true,
+    //     data: cachedData
+    //   });
+    // }
 
     const translated = await getOrCreateTranslation(inFlightKey, payload);
-    if (hasSuccessfulTranslation(translated)) {
-      cacheTranslation(
-        cacheKey,
-        resolveStoredSourceWord(translated, payload.sourceWord),
-        payload.sourceLanguage,
-        payload.targetLanguages,
-        translated
-      );
-    }
+    // if (hasSuccessfulTranslation(translated)) {
+    //   cacheTranslation(
+    //     cacheKey,
+    //     resolveStoredSourceWord(translated, payload.sourceWord),
+    //     payload.sourceLanguage,
+    //     payload.targetLanguages,
+    //     translated
+    //   );
+    // }
 
     return NextResponse.json({
       fromCache: false,
