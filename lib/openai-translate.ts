@@ -864,8 +864,7 @@ async function requestWordSuggestions(input: TranslateInput, apiKey: string, bud
     systemPrompt: WORD_SUGGEST_SYSTEM_PROMPT,
     userPrompt: buildWordSuggestionPrompt(input),
     maxTokens: Math.min(OPENAI_MAX_TOKENS, 120),
-    logLabel: "openai:word-suggest",
-    budget
+    logLabel: "openai:word-suggest"
   });
 
   return parseSuggestedWordsContent(content);
@@ -877,21 +876,16 @@ async function requestOpenAIContent(params: {
   systemPrompt: string;
   userPrompt: string;
   maxTokens: number;
-  logLabel: string;
-  budget?: RequestBudget;
+  logLabel: string; 
 }): Promise<string> {
-  const { apiKey, baseUrl, systemPrompt, userPrompt, maxTokens, logLabel, budget } = params;
-  const remainingBudgetMs = getRemainingBudgetMs(budget);
-  if (remainingBudgetMs <= 0) {
-    throw new Error(`${logLabel} skipped because the request time budget was exhausted`);
-  }
+  const { apiKey, baseUrl, systemPrompt, userPrompt, maxTokens, logLabel } = params;
 
-  const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
+  // const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
   // const startedAt = performance.now();
   const client = createOpenAIClient({
     apiKey,
     baseUrl,
-    timeoutMs
+    // timeoutMs
   });
   // const controller = new AbortController();
   // const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -924,9 +918,9 @@ async function requestOpenAIContent(params: {
     return content;
   } catch (error) {
     // const elapsed = performance.now() - startedAt;
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
-    }
+    // if (error instanceof Error && error.name === "AbortError") {
+    //   throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
+    // }
 
     const errorStatus =
       error && typeof error === "object" && "status" in error && typeof error.status === "number"
@@ -979,7 +973,7 @@ function normalizeTextPayloadFromCsv(csv: string, input: TranslateTextInput): Te
 }
 
 async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<TranslationPayload> {
-  const budget = createRequestBudget(OPENAI_TOTAL_TIMEOUT_MS);
+  // const budget = createRequestBudget(OPENAI_TOTAL_TIMEOUT_MS);
 
   const requestWordPayload = async (requestInput: TranslateInput): Promise<TranslationPayload> => {
     const baseUserPrompt = buildWordUserPrompt(requestInput);
@@ -993,8 +987,7 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
       systemPrompt: WORD_SYSTEM_PROMPT,
       userPrompt: baseUserPrompt,
       maxTokens: OPENAI_MAX_TOKENS,
-      logLabel: "openai:word",
-      budget
+      logLabel: "openai:word"
     });
 
     let payload = parseWordPayloadFlexible(content, requestInput);
@@ -1025,26 +1018,27 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
   };
 
   let payload: TranslationPayload;
-  try {
+  // try {
     payload = await requestWordPayload(input);
-  } catch (error) {
-    try {
-      if (hasBudgetForFollowup(budget)) {
-        const suggestions = await requestWordSuggestions(input, apiKey, budget);
-        if (suggestions.length > 0) {
-          return createSuggestionOnlyPayload(input, suggestions);
-        }
-      } else {
-        console.warn("[openai:word] Skipped fallback suggestions because the remaining request budget is too low.");
-      }
-    } catch {
-      // Fall through to original error below.
-    }
+  // } catch (error) {
+    // try {
+    //   if (hasBudgetForFollowup(budget)) {
+    //     const suggestions = await requestWordSuggestions(input, apiKey, budget);
+    //     if (suggestions.length > 0) {
+    //       return createSuggestionOnlyPayload(input, suggestions);
+    //     }
+    //   } else {
+    //     console.warn("[openai:word] Skipped fallback suggestions because the remaining request budget is too low.");
+    //   }
+    // } catch {
+    //   // Fall through to original error below.
+    // }
+  //   throw error;
+  // }
 
-    throw error;
-  }
-
-  if (shouldRefineCorrectedWordPayload(input, payload) && hasBudgetForFollowup(budget)) {
+  if (shouldRefineCorrectedWordPayload(input, payload) 
+    // && hasBudgetForFollowup(budget)
+  ) {
     const correctedWord = payload.correctedSourceWord!.trim();
     try {
       const correctedPayload = await requestWordPayload({
@@ -1059,21 +1053,21 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
     console.warn("[openai:word] Skipped corrected-word refinement because the remaining request budget is too low.");
   }
 
-  if (shouldSuggestCandidates(input, payload) && hasBudgetForFollowup(budget)) {
-    try {
-      const suggestions = await requestWordSuggestions(input, apiKey, budget);
-      if (suggestions.length > 0) {
-        payload = {
-          ...payload,
-          suggestedSourceWords: suggestions
-        };
-      }
-    } catch {
-      // Keep the best payload we already have.
-    }
-  } else if (shouldSuggestCandidates(input, payload)) {
-    console.warn("[openai:word] Skipped candidate suggestions because the remaining request budget is too low.");
-  }
+  // if (shouldSuggestCandidates(input, payload) && hasBudgetForFollowup(budget)) {
+  //   try {
+  //     const suggestions = await requestWordSuggestions(input, apiKey, budget);
+  //     if (suggestions.length > 0) {
+  //       payload = {
+  //         ...payload,
+  //         suggestedSourceWords: suggestions
+  //       };
+  //     }
+  //   } catch {
+  //     // Keep the best payload we already have.
+  //   }
+  // } else if (shouldSuggestCandidates(input, payload)) {
+  //   console.warn("[openai:word] Skipped candidate suggestions because the remaining request budget is too low.");
+  // }
 
   return clearSuggestionsIfResolved(payload);
 }
@@ -1099,7 +1093,7 @@ export async function translateTextWithOpenAI(input: TranslateTextInput): Promis
     userPrompt: buildTextUserPrompt(input),
     maxTokens: OPENAI_TEXT_MAX_TOKENS,
     logLabel: "openai:text",
-    budget: createRequestBudget(Math.min(OPENAI_TIMEOUT_MS, OPENAI_TOTAL_TIMEOUT_MS))
+    // budget: createRequestBudget(Math.min(OPENAI_TIMEOUT_MS, OPENAI_TOTAL_TIMEOUT_MS))
   });
 
   return normalizeTextPayloadFromCsv(content, input);
