@@ -1,3 +1,11 @@
+import type {
+  VerbConjugationApiResponse,
+  VerbConjugationResult,
+  VerbConjugationRow,
+  VerbConjugationSection,
+  VerbConjugationTable
+} from "@/lib/lang-conjugation/types";
+
 export type FrenchVerbGroup = "first" | "second" | "third";
 
 export type FrenchConjugationMood =
@@ -29,40 +37,18 @@ export type FrenchConjugationTense =
   | "presentGerund"
   | "pastGerund";
 
-export type FrenchConjugationRow = {
-  form: string;
-  label: string;
-  labelKey?: string;
-};
-
-export type FrenchConjugationTable = {
-  id: FrenchConjugationTense;
-  layout: "personal" | "single";
-  rows: FrenchConjugationRow[];
-};
-
-export type FrenchConjugationSection = {
+export type FrenchConjugationRow = VerbConjugationRow;
+export type FrenchConjugationTable = Omit<VerbConjugationTable, "id"> & { id: FrenchConjugationTense };
+export type FrenchConjugationSection = Omit<VerbConjugationSection, "id" | "tables"> & {
   id: FrenchConjugationMood;
   tables: FrenchConjugationTable[];
 };
-
-export type FrenchConjugationResult = {
+export type FrenchConjugationResult = VerbConjugationResult & {
   group: FrenchVerbGroup;
-  infinitive: string;
-  noteKeys: string[];
+  language: "fr";
   sections: FrenchConjugationSection[];
 };
-
-export type FrenchConjugationApiResponse =
-  | {
-      result: FrenchConjugationResult;
-      status: "ok";
-    }
-  | {
-      normalizedVerb: string;
-      reason: "invalid" | "irregular" | "pronominal" | "spelling";
-      status: "pending_backend";
-    };
+export type FrenchConjugationApiResponse = VerbConjugationApiResponse;
 
 export const FRENCH_CONJUGATION_GROUP_LABEL_KEYS = {
   first: "conjugation.group.first",
@@ -100,6 +86,37 @@ export const FRENCH_CONJUGATION_TENSE_LABEL_KEYS = {
   subjunctivePast: "conjugation.tense.subjunctivePast",
   subjunctivePresent: "conjugation.tense.subjunctivePresent"
 } as const;
+
+export const FRENCH_CONJUGATION_MOOD_ORDER: FrenchConjugationMood[] = [
+  "indicative",
+  "subjunctive",
+  "conditional",
+  "imperative",
+  "participle",
+  "infinitive",
+  "gerund"
+];
+
+export const FRENCH_CONJUGATION_TENSE_ORDER: FrenchConjugationTense[] = [
+  "present",
+  "imperfect",
+  "passeCompose",
+  "plusQueParfait",
+  "passeSimple",
+  "futureSimple",
+  "futurAnterieur",
+  "subjunctivePresent",
+  "subjunctivePast",
+  "conditionalPresent",
+  "conditionalPast",
+  "imperativePresent",
+  "presentParticiple",
+  "pastParticiple",
+  "presentInfinitive",
+  "pastInfinitive",
+  "presentGerund",
+  "pastGerund"
+];
 
 const PERSONAL_PRONOUNS = ["je", "tu", "il / elle / on", "nous", "vous", "ils / elles"] as const;
 const IMPERATIVE_PRONOUNS = ["tu", "nous", "vous"] as const;
@@ -382,6 +399,7 @@ export function buildFrenchConjugation(verbInput: string): FrenchConjugationApiR
     result: {
       group,
       infinitive: verb,
+      language: "fr",
       noteKeys,
       sections: [
         {

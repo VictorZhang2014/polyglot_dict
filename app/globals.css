@@ -441,6 +441,15 @@ a {
 
 .conjugation-page-title {
   color: var(--app-link-strong);
+  font-size: 1.02rem !important;
+  line-height: 1.3;
+}
+
+.conjugation-page-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .conjugation-page-header-spacer {
@@ -492,6 +501,11 @@ a {
   color: var(--app-link-strong);
 }
 
+.conjugation-tense-heading {
+  font-size: 1rem !important;
+  line-height: 1.3;
+}
+
 .conjugation-mood-label {
   margin-bottom: 4px;
   color: var(--app-hint);
@@ -525,6 +539,7 @@ a {
 
 .conjugation-table td {
   color: var(--app-translation-text);
+  font-weight: 700;
 }
 
 .conjugation-table tbody tr:last-child td {
@@ -555,6 +570,10 @@ a {
     gap: 10px;
   }
 
+  .conjugation-page-title {
+    font-size: 0.96rem !important;
+  }
+
   .conjugation-back-button,
   .conjugation-page-header-spacer {
     width: 40px;
@@ -563,6 +582,10 @@ a {
 
   .conjugation-grid-two-columns .rt-Card {
     padding: 12px;
+  }
+
+  .conjugation-tense-heading {
+    font-size: 0.94rem !important;
   }
 
   .conjugation-table th,

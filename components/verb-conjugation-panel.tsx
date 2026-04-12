@@ -2,18 +2,20 @@
 
 import { Card, Flex, Heading, Text } from "@radix-ui/themes";
 import type { I18nKey } from "@/lib/i18n";
-import {
-  FRENCH_CONJUGATION_MOOD_LABEL_KEYS,
-  FRENCH_CONJUGATION_TENSE_LABEL_KEYS,
-  type FrenchConjugationResult
-} from "@/lib/lang-conjugation/french-conjugation";
+import type { VerbConjugationResult } from "@/lib/lang-conjugation/types";
 import { useI18n } from "@/lib/use-i18n";
 
-type FrenchConjugationPanelProps = {
-  result: FrenchConjugationResult;
+type VerbConjugationPanelProps = {
+  moodLabelKeys: Record<string, I18nKey>;
+  result: VerbConjugationResult;
+  tenseLabelKeys: Record<string, I18nKey>;
 };
 
-export function FrenchConjugationPanel({ result }: FrenchConjugationPanelProps) {
+export function VerbConjugationPanel({
+  moodLabelKeys,
+  result,
+  tenseLabelKeys
+}: VerbConjugationPanelProps) {
   const { t } = useI18n();
   const tenseBlocks = result.sections.flatMap((section) =>
     section.tables.map((table) => ({
@@ -26,13 +28,15 @@ export function FrenchConjugationPanel({ result }: FrenchConjugationPanelProps) 
     <Flex direction="column" gap="4">
       <div className="conjugation-grid conjugation-grid-two-columns">
         {tenseBlocks.map(({ moodId, table }) => (
-          <Card size="4" key={table.id} className="conjugation-tense-card">
+          <Card size="4" key={`${moodId}:${table.id}`} className="conjugation-tense-card">
             <Flex direction="column" gap="3">
               <div>
                 <Text as="p" size="1" className="conjugation-mood-label">
-                  {t(FRENCH_CONJUGATION_MOOD_LABEL_KEYS[moodId] as I18nKey)}
+                  {t(moodLabelKeys[moodId])}
                 </Text>
-                <Heading size="4">{t(FRENCH_CONJUGATION_TENSE_LABEL_KEYS[table.id] as I18nKey)}</Heading>
+                <Heading size="4" className="conjugation-tense-heading">
+                  {t(tenseLabelKeys[table.id])}
+                </Heading>
               </div>
 
               <div className="conjugation-table-shell">

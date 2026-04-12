@@ -150,7 +150,7 @@ export async function POST(request: Request) {
       console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
       return new Response(serializeWordTranslationPayload(cachedData), {
         headers: {
-          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
           "X-Accel-Buffering": "no",
           "X-Polyglot-From-Cache": "true"
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
 
     return new Response(stream, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
         "X-Polyglot-From-Cache": "false"

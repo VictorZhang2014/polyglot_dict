@@ -4,11 +4,29 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeftIcon, InfoCircledIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Callout, Flex, Heading, IconButton } from "@radix-ui/themes";
-import { FrenchConjugationPanel } from "@/components/french-conjugation-panel";
-import type { FrenchConjugationApiResponse } from "@/lib/lang-conjugation/french-conjugation";
+import { VerbConjugationPanel } from "@/components/verb-conjugation-panel";
+import type { VerbConjugationApiResponse } from "@/lib/lang-conjugation/types";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
 import { useI18n } from "@/lib/use-i18n";
-import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
+import {
+  getConjugationMoodLabelKeys,
+  getConjugationTenseLabelKeys,
+  supportsVerbConjugationLanguage
+} from "@/lib/verb-conjugation";
+
+const SELF_LANGUAGE_LABELS: Record<string, string> = {
+  de: "Deutsch",
+  en: "English",
+  fr: "Français",
+  zh: "中文",
+  es: "Español",
+  it: "Italiano",
+  pt: "Português",
+  ja: "日本語",
+  ko: "한국어",
+  ru: "Русский",
+  ar: "العربية"
+};
 
 type ConjugationPageClientProps = {
   sourceWord: string;
@@ -22,10 +40,13 @@ export function ConjugationPageClient({
   const { t } = useI18n();
   const isSupported = supportsVerbConjugationLanguage(sourceLanguage);
   const languageName = sourceLanguage ? getLanguageName(sourceLanguage, BUILTIN_LANGUAGES) : "";
+  const selfLanguageName = sourceLanguage
+    ? SELF_LANGUAGE_LABELS[sourceLanguage] ?? languageName.replace(/\s*\(.+\)\s*$/, "")
+    : "";
   const normalizedWord = useMemo(() => sourceWord.trim(), [sourceWord]);
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
-  const [response, setResponse] = useState<FrenchConjugationApiResponse | null>(null);
+  const [response, setResponse] = useState<VerbConjugationApiResponse | null>(null);
 
   useEffect(() => {
     if (!normalizedWord || !sourceLanguage || !isSupported) {
@@ -49,14 +70,14 @@ export function ConjugationPageClient({
             signal: controller.signal
           }
         );
-        const data = (await res.json()) as FrenchConjugationApiResponse;
+        const data = (await res.json()) as VerbConjugationApiResponse;
         setResponse(data);
       } catch (error) {
         if (controller.signal.aborted) {
           return;
         }
 
-        console.error("[conjugation] failed to load French conjugation:", error);
+        console.error("[conjugation] failed to load verb conjugation:", error);
         setRequestError(t("conjugation.error"));
         setResponse(null);
       } finally {
@@ -82,16 +103,18 @@ export function ConjugationPageClient({
               <ChevronLeftIcon />
             </Link>
           </IconButton>
-          <Heading size="5" align="center" className="conjugation-page-title">
-            动词变位
-          </Heading>
+          <div className="conjugation-page-title-wrap">
+            <Heading size="5" align="center" className="conjugation-page-title">
+              动词变位{selfLanguageName ? ` · ${selfLanguageName}` : ""}
+            </Heading>
+            {normalizedWord ? (
+              <Badge variant="soft" className="conjugation-query-word-badge">
+                {normalizedWord}
+              </Badge>
+            ) : null}
+          </div>
           <div className="conjugation-page-header-spacer" aria-hidden="true" />
         </div>
-        {normalizedWord ? (
-          <Badge variant="soft" className="conjugation-query-word-badge">
-            {normalizedWord}
-          </Badge>
-        ) : null}
       </Box>
 
       {!sourceWord || !sourceLanguage ? (
@@ -122,7 +145,11 @@ export function ConjugationPageClient({
           <div className="conjugation-loading-spinner" aria-label={t("conjugation.loading")} />
         </Flex>
       ) : response?.status === "ok" ? (
-        <FrenchConjugationPanel result={response.result} />
+        <VerbConjugationPanel
+          moodLabelKeys={getConjugationMoodLabelKeys(response.result.language)}
+          result={response.result}
+          tenseLabelKeys={getConjugationTenseLabelKeys(response.result.language)}
+        />
       ) : (
         <Flex align="center" justify="center" className="conjugation-loading-wrap">
           <div className="conjugation-loading-spinner" aria-label={t("conjugation.loading")} />
