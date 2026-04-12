@@ -75,9 +75,47 @@ const CSV_CONFIG: Record<SupportedConjugationLanguage, CsvLanguageConfig> = {
 };
 
 const csvCache = new Map<SupportedConjugationLanguage, Map<string, VerbConjugationResult>>();
+const GERMAN_SEPARABLE_PREFIXES = [
+  "zurück",
+  "zusammen",
+  "vorbei",
+  "weiter",
+  "nieder",
+  "empor",
+  "herab",
+  "heran",
+  "hinab",
+  "hinaus",
+  "hinweg",
+  "wieder",
+  "ab",
+  "an",
+  "auf",
+  "aus",
+  "bei",
+  "ein",
+  "fest",
+  "fort",
+  "her",
+  "hin",
+  "los",
+  "mit",
+  "nach",
+  "vor",
+  "weg",
+  "zu"
+] as const;
 
 function normalizeVerbForLookup(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ").normalize("NFC");
+}
+
+function replaceTrailingSuffix(value: string, suffix: string, replacement: string): string {
+  if (!suffix || !value.endsWith(suffix)) {
+    return value;
+  }
+
+  return `${value.slice(0, -suffix.length)}${replacement}`;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -253,17 +291,122 @@ function buildCsvIndex(language: SupportedConjugationLanguage): Map<string, Verb
   return index;
 }
 
+function getSingleForm(result: VerbConjugationResult, tableId: string): string {
+  for (const section of result.sections) {
+    const table = section.tables.find((entry) => entry.id === tableId);
+    if (table?.rows[0]?.form) {
+      return table.rows[0].form;
+    }
+  }
+
+  return "";
+}
+
+function deriveGermanSeparableIrregularResult(
+  infinitive: string,
+  csvIndex: Map<string, VerbConjugationResult>
+): VerbConjugationResult | null {
+  const normalizedVerb = normalizeVerbForLookup(infinitive);
+  const separablePrefix =
+    [...GERMAN_SEPARABLE_PREFIXES]
+      .sort((left, right) => right.length - left.length)
+      .find((prefix) => normalizedVerb.startsWith(prefix) && csvIndex.has(normalizedVerb.slice(prefix.length))) ?? "";
+
+  if (!separablePrefix) {
+    return null;
+  }
+
+  const baseInfinitive = normalizedVerb.slice(separablePrefix.length);
+  const baseResult = csvIndex.get(baseInfinitive);
+  if (!baseResult || baseResult.language !== "de") {
+    return null;
+  }
+
+  const basePastParticiple = getSingleForm(baseResult, "pastParticiple");
+  const basePresentParticiple = getSingleForm(baseResult, "presentParticiple");
+  const basePerfectInfinitive = getSingleForm(baseResult, "perfectInfinitive");
+  const derivedPastParticiple = basePastParticiple ? `${separablePrefix}${basePastParticiple}` : "";
+  const derivedPresentParticiple = basePresentParticiple ? `${separablePrefix}${basePresentParticiple}` : "";
+  const derivedPerfectInfinitive = basePerfectInfinitive ? `${separablePrefix}${basePerfectInfinitive}` : "";
+
+  return {
+    ...baseResult,
+    infinitive,
+    sections: baseResult.sections.map((section) => ({
+      ...section,
+      tables: section.tables.map((table) => ({
+        ...table,
+        rows: table.rows.map((row) => {
+          let form = row.form;
+
+          switch (table.id) {
+            case "present":
+            case "preterite":
+            case "subjunctiveI":
+            case "subjunctiveII":
+            case "imperativePresent":
+              form = `${row.form} ${separablePrefix}`;
+              break;
+            case "perfect":
+            case "pluperfect":
+            case "subjunctiveIPerfect":
+            case "subjunctiveIIPerfect":
+              form = replaceTrailingSuffix(row.form, ` ${basePastParticiple}`, ` ${derivedPastParticiple}`);
+              break;
+            case "futureI":
+              form = replaceTrailingSuffix(row.form, ` ${baseResult.infinitive}`, ` ${infinitive}`);
+              break;
+            case "futureII":
+              form = replaceTrailingSuffix(row.form, ` ${basePerfectInfinitive}`, ` ${derivedPerfectInfinitive}`);
+              break;
+            case "presentParticiple":
+              form = derivedPresentParticiple || row.form;
+              break;
+            case "pastParticiple":
+              form = derivedPastParticiple || row.form;
+              break;
+            case "presentInfinitive":
+              form = infinitive;
+              break;
+            case "perfectInfinitive":
+              form = derivedPerfectInfinitive || row.form;
+              break;
+            default:
+              break;
+          }
+
+          return {
+            ...row,
+            form
+          };
+        })
+      }))
+    }))
+  };
+}
+
 export function buildVerbConjugationResponse(
   language: SupportedConjugationLanguage,
   verbInput: string
 ): VerbConjugationApiResponse {
   const normalizedVerb = normalizeVerbForLookup(verbInput);
-  const csvResult = buildCsvIndex(language).get(normalizedVerb);
+  const csvIndex = buildCsvIndex(language);
+  const csvResult = csvIndex.get(normalizedVerb);
   if (csvResult) {
     return {
       result: csvResult,
       status: "ok"
     };
+  }
+
+  if (language === "de") {
+    const derivedResult = deriveGermanSeparableIrregularResult(normalizedVerb, csvIndex);
+    if (derivedResult) {
+      return {
+        result: derivedResult,
+        status: "ok"
+      };
+    }
   }
 
   return CSV_CONFIG[language].builder(verbInput);
