@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeftIcon, InfoCircledIcon } from "@radix-ui/react-icons";
+import { ChevronLeftIcon, EnvelopeClosedIcon, InfoCircledIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Callout, Flex, Heading, IconButton } from "@radix-ui/themes";
 import { VerbConjugationPanel } from "@/components/verb-conjugation-panel";
 import type { VerbConjugationApiResponse } from "@/lib/lang-conjugation/types";
@@ -27,6 +27,7 @@ const SELF_LANGUAGE_LABELS: Record<string, string> = {
   ru: "Русский",
   ar: "العربية"
 };
+const CONTACT_EMAIL = "contact@parlerai.app";
 
 type ConjugationPageClientProps = {
   sourceWord: string;
@@ -98,8 +99,8 @@ export function ConjugationPageClient({
     <Flex direction="column" gap="4">
       <Box className="conjugation-page-header">
         <div className="conjugation-page-header-top">
-          <IconButton asChild variant="soft" color="gray" radius="full" size="3" className="conjugation-back-button">
-            <Link href="/" aria-label="返回首页">
+          <IconButton asChild variant="soft" color="gray" radius="full" size="3" className="conjugation-float-button">
+            <Link href="/" aria-label="Back to home">
               <ChevronLeftIcon />
             </Link>
           </IconButton>
@@ -113,7 +114,24 @@ export function ConjugationPageClient({
               </Badge>
             ) : null}
           </div>
-          <div className="conjugation-page-header-spacer" aria-hidden="true" />
+          <IconButton
+            asChild
+            variant="soft"
+            color="gray"
+            radius="full"
+            size="3"
+            className="conjugation-float-button"
+          >
+            <a
+              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+                `Conjugation feedback${normalizedWord ? `: ${normalizedWord}` : ""}`
+              )}`}
+              aria-label="Send feedback email"
+              title="Send feedback email"
+            >
+              <EnvelopeClosedIcon />
+            </a>
+          </IconButton>
         </div>
       </Box>
 

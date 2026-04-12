@@ -432,7 +432,7 @@ a {
   gap: 12px;
 }
 
-.conjugation-back-button {
+.conjugation-float-button {
   width: 44px;
   height: 44px;
   background: var(--app-float-btn-bg) !important;
@@ -450,11 +450,6 @@ a {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-}
-
-.conjugation-page-header-spacer {
-  width: 44px;
-  height: 44px;
 }
 
 .conjugation-query-word-badge {
@@ -574,8 +569,7 @@ a {
     font-size: 0.96rem !important;
   }
 
-  .conjugation-back-button,
-  .conjugation-page-header-spacer {
+  .conjugation-float-button {
     width: 40px;
     height: 40px;
   }
