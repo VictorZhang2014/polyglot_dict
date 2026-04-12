@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/set
 import { TranslateTextApiResponse } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
 
+const TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
 const LANGUAGE_FLAGS: Record<string, string> = {
   de: "🇩🇪",
   en: "🇬🇧",
@@ -67,6 +68,25 @@ function resolveRecordingExtension(mimeType: string): string {
 }
 
 type RecordingState = "idle" | "recording" | "transcribing";
+
+function createEmptyTranslateResponse(
+  sourceText: string,
+  sourceLanguage: string,
+  targetLanguages: string[],
+  fromCache: boolean
+): TranslateTextApiResponse {
+  return {
+    fromCache,
+    data: {
+      sourceText,
+      sourceLanguage,
+      translations: targetLanguages.map((targetLanguage) => ({
+        targetLanguage,
+        translatedText: ""
+      }))
+    }
+  };
+}
 
 export default function TranslatePage() {
   const { t } = useI18n();
@@ -146,10 +166,11 @@ export default function TranslatePage() {
 
       const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
       const isJson = contentType.includes("application/json");
-      const rawBody = isJson ? "" : await res.text();
-      const data = (isJson ? await res.json() : null) as (TranslateTextApiResponse & { error?: string }) | null;
+      const fromCache = (res.headers.get("x-polyglot-from-cache") ?? "").toLowerCase() === "true";
 
       if (!res.ok) {
+        const rawBody = isJson ? "" : await res.text();
+        const data = (isJson ? await res.json() : null) as { error?: string } | null;
         if (data?.error) {
           throw new Error(data.error);
         }
@@ -162,11 +183,97 @@ export default function TranslatePage() {
         throw new Error(t("translate.error.failed"));
       }
 
-      if (!data) {
-        throw new Error(`API ${res.status} returned non-JSON response.`);
+      setResponse(createEmptyTranslateResponse(value, sourceLanguage, visibleTargets, fromCache));
+
+      const applyTranslatedSegment = (segment: string, targetLanguage: string) => {
+        const translatedText = segment.trim();
+        setResponse((current) => {
+          if (!current) {
+            return createEmptyTranslateResponse(value, sourceLanguage, visibleTargets, fromCache);
+          }
+
+          return {
+            ...current,
+            fromCache,
+            data: {
+              ...current.data,
+              translations: current.data.translations.map((item) =>
+                item.targetLanguage === targetLanguage ? { ...item, translatedText } : item
+              )
+            }
+          };
+        });
+      };
+
+      if (!res.body) {
+        const rawBody = isJson ? "" : await res.text();
+        if (!rawBody) {
+          throw new Error(`API ${res.status} returned an empty response.`);
+        }
+
+        const segments = rawBody.split(TRANSLATION_STREAM_SEPARATOR);
+        visibleTargets.forEach((targetLanguage, index) => {
+          const segment = segments[index]?.trim() ?? "";
+          if (segment) {
+            applyTranslatedSegment(segment, targetLanguage);
+          }
+        });
+        return;
       }
 
-      setResponse(data);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let nextTargetIndex = 0;
+
+      const applyCurrentStreamingSegment = () => {
+        const targetLanguage = visibleTargets[nextTargetIndex];
+        if (!targetLanguage || !buffer) {
+          return;
+        }
+
+        applyTranslatedSegment(buffer, targetLanguage);
+      };
+
+      while (true) {
+        const { value: chunk, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(chunk, { stream: true });
+
+        let separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
+        while (separatorIndex !== -1) {
+          const segment = buffer.slice(0, separatorIndex);
+          const targetLanguage = visibleTargets[nextTargetIndex];
+          if (targetLanguage) {
+            applyTranslatedSegment(segment, targetLanguage);
+            nextTargetIndex += 1;
+          }
+
+          buffer = buffer.slice(separatorIndex + TRANSLATION_STREAM_SEPARATOR.length);
+          separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
+        }
+
+        applyCurrentStreamingSegment();
+      }
+
+      buffer += decoder.decode();
+      let separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
+      while (separatorIndex !== -1) {
+        const segment = buffer.slice(0, separatorIndex);
+        const targetLanguage = visibleTargets[nextTargetIndex];
+        if (targetLanguage) {
+          applyTranslatedSegment(segment, targetLanguage);
+          nextTargetIndex += 1;
+        }
+
+        buffer = buffer.slice(separatorIndex + TRANSLATION_STREAM_SEPARATOR.length);
+        separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
+      }
+
+      applyCurrentStreamingSegment();
     } catch (translateError) {
       setError(translateError instanceof Error ? translateError.message : t("translate.error.failed"));
     } finally {

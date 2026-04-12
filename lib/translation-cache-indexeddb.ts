@@ -77,7 +77,7 @@ async function getDatabase(): Promise<IDBDatabase | null> {
 export function buildTranslationCacheKey(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
   const targets = Array.from(new Set(targetLanguages.map((item) => item.trim().toLowerCase()).filter(Boolean))).sort();
   return JSON.stringify({
-    v: 9,
+    v: 10,
     sourceWord: sourceWord.trim().toLowerCase(),
     sourceLanguage: sourceLanguage.trim().toLowerCase(),
     targetLanguages: targets

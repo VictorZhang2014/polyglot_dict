@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/set
 import { buildTranslationCacheKey, getTranslationCacheEntry, setTranslationCacheEntry } from "@/lib/translation-cache-indexeddb";
 import { TranslateApiResponse, TranslationPayload } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
+import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
@@ -122,6 +123,21 @@ function shouldShowSourceSuggestions(payload: TranslationPayload): boolean {
     !payload.sourceLemma?.trim() &&
     normalizeWord(payload.sourcePartOfSpeech ?? "") === "unknown"
   );
+}
+
+function normalizeStreamingPayload(payload: TranslationPayload, targetLanguages: string[]): TranslationPayload {
+  return {
+    ...payload,
+    suggestedSourceWords: Array.from(new Set(payload.suggestedSourceWords ?? [])).slice(0, 5),
+    translations: targetLanguages.map((targetLanguage) => {
+      const item = payload.translations.find((entry) => entry.targetLanguage === targetLanguage);
+      return {
+        targetLanguage,
+        directTranslation: item?.directTranslation ?? "",
+        similarWords: Array.from(new Set(item?.similarWords ?? [])).slice(0, 3)
+      };
+    })
+  };
 }
 
 export default function HomePage() {
@@ -468,10 +484,11 @@ export default function HomePage() {
 
       const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
       const isJson = contentType.includes("application/json");
-      const rawBody = isJson ? "" : await res.text();
-      const data = (isJson ? await res.json() : null) as (TranslateApiResponse & { error?: string }) | null;
+      const fromCache = (res.headers.get("x-polyglot-from-cache") ?? "").toLowerCase() === "true";
 
       if (!res.ok) {
+        const rawBody = isJson ? "" : await res.text();
+        const data = (isJson ? await res.json() : null) as ({ error?: string } | null);
         if (data?.error) {
           throw new Error(data.error);
         }
@@ -484,25 +501,70 @@ export default function HomePage() {
         throw new Error(t("home.error.queryFailed"));
       }
 
-      if (!data) {
-        throw new Error(`API ${res.status} returned non-JSON response.`);
-      }
+      let currentPayload = createEmptyWordPayload({
+        sourceWord: word,
+        sourceLanguage: languageCode,
+        targetLanguages: targets
+      });
 
-      const normalizedPayload: TranslationPayload = {
-        ...data.data,
-        suggestedSourceWords: Array.from(new Set(data.data.suggestedSourceWords ?? [])).slice(0, 5),
-        translations: targets.map((targetLanguage) => {
-          const item = data.data.translations.find((entry) => entry.targetLanguage === targetLanguage);
-          return {
-            targetLanguage,
-            directTranslation: item?.directTranslation ?? "",
-            similarWords: Array.from(new Set(item?.similarWords ?? [])).slice(0, 3)
-          };
-        })
+      const applyProtocolLine = (line: string) => {
+        const event = parseWordProtocolLine(line);
+        if (!event) {
+          return;
+        }
+
+        currentPayload = applyWordProtocolEvent(currentPayload, event);
+        setResponse({
+          fromCache,
+          data: currentPayload
+        });
       };
 
       setResponse({
-        fromCache: false,
+        fromCache,
+        data: currentPayload
+      });
+
+      if (!res.body) {
+        const rawBody = isJson ? "" : await res.text();
+        if (!rawBody) {
+          throw new Error(`API ${res.status} returned an empty response.`);
+        }
+
+        for (const line of rawBody.split(/\r?\n/)) {
+          applyProtocolLine(line);
+        }
+      } else {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value: chunk, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(chunk, { stream: true });
+
+          let lineBreakIndex = buffer.indexOf("\n");
+          while (lineBreakIndex !== -1) {
+            const line = buffer.slice(0, lineBreakIndex);
+            applyProtocolLine(line);
+            buffer = buffer.slice(lineBreakIndex + 1);
+            lineBreakIndex = buffer.indexOf("\n");
+          }
+        }
+
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          applyProtocolLine(buffer);
+        }
+      }
+
+      const normalizedPayload = normalizeStreamingPayload(currentPayload, targets);
+      setResponse({
+        fromCache,
         data: normalizedPayload
       });
 

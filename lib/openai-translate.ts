@@ -6,6 +6,7 @@ import {
 } from "@/lib/types";
 import { getLanguageWordGuardrail } from "@/lib/language-guardrails";
 import { createOpenAIClient } from "@/lib/openai-client";
+import { createEmptyWordPayload } from "@/lib/word-stream-protocol";
 
 type TranslateInput = {
   sourceWord: string;
@@ -20,15 +21,13 @@ type TranslateTextInput = {
 };
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
-const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL ?? "https://api.openai.com/v1/chat/completions";
 const OPENAI_MAX_TOKENS = Number.parseInt(process.env.OPENAI_MAX_TOKENS ?? "320", 10);
 const OPENAI_TEXT_MAX_TOKENS = Number.parseInt(process.env.OPENAI_TEXT_MAX_TOKENS ?? "520", 10);
-const OPENAI_TIMEOUT_MS = Number.parseInt(process.env.OPENAI_TIMEOUT_MS ?? "12000", 10);
-const OPENAI_TOTAL_TIMEOUT_MS = Number.parseInt(process.env.OPENAI_TOTAL_TIMEOUT_MS ?? "10000", 10);
-const OPENAI_FOLLOWUP_MIN_BUDGET_MS = Number.parseInt(process.env.OPENAI_FOLLOWUP_MIN_BUDGET_MS ?? "2500", 10);
 const GENDERED_LANGUAGE_CODES = new Set(["de", "fr", "es", "it", "pt", "ru", "ar"]);
 const WORD_TARGET_SIMILAR_LIMIT = 3;
 const WORD_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return strict JSON only.";
+const WORD_FAST_STREAM_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return compact plain-text event lines only.";
+const WORD_DETAIL_STREAM_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return compact plain-text detail lines only.";
 const WORD_PROMPT_RESPONSE_SCHEMA = `Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):
 {
   "sourcePhonetic": string,
@@ -65,33 +64,49 @@ const WORD_PROMPT_RULES = `Rules:
 - Return 1 reliable directTranslation and up to 3 reliable similarWords for each target language.
 - If you are unsure, prefer fewer items instead of guessing or mixing languages.
 - similarWords must not duplicate directTranslation.`;
-const WORD_RETRY_RULES = `- Ensure sourcePhonetic matches the final valid source word after any spelling correction.
-- Ensure noun entries include sourcePluralForm, and it refers to the final valid source word after any spelling correction.
-- If the intended word is still uncertain, return 3-5 candidates in suggestedSourceWords instead of guessing translations.
-- Reject cross-language leakage in directTranslation and similarWords.
-- Validate part-of-speech and lemma strictly in the source language context.
-- Return valid JSON only.`;
-const WORD_SUGGEST_SYSTEM_PROMPT = "You suggest likely intended source words for misspelled input. Return strict JSON only.";
-const WORD_SUGGEST_RESPONSE_SCHEMA = `Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):
-{
-  "suggestedSourceWords": [string]
-}`;
-const WORD_SUGGEST_RULES = `Rules:
-- Work only in the provided source language.
-- Return 3-5 likely intended source words for the misspelled input.
-- Return only real, standard words in the source language.
-- Order candidates from most likely to least likely.
-- If you are very unsure, return fewer items instead of inventing words.`;
-const TEXT_SYSTEM_PROMPT = "You are a multilingual translation assistant. Return strict CSV only.";
-const TEXT_PROMPT_RULES = `Return CSV with header exactly:
-targetLanguage,translatedText
-Rules:
+const WORD_FAST_STREAM_PROMPT_RULES = `Rules:
+- No markdown, no code fences, and no explanations.
+- Output exactly one CORRECTED line: CORRECTED|<corrected word or empty>
+- Output exactly one POS line: POS|<noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|numeral|particle|determiner|unknown>
+- If you are not confident what the intended source word is, keep CORRECTED empty unless the spelling correction is obvious, keep POS as unknown, keep all TRANS values empty, and output 3-5 SUGGEST lines.
+- For likely alternatives, output up to 5 lines: SUGGEST|<candidate>
+- For each target language code, output exactly one line in the same order: TRANS|<language code>|<direct translation or empty>
+- Finish with exactly one line: DONE
+- Never use the pipe character inside field values.
+- direct translations must be natural lexical items in the target language only.
+- If the source spelling is already correct, keep the CORRECTED value empty after the pipe.`;
+const WORD_DETAIL_STREAM_PROMPT_RULES = `Rules:
+- No markdown, no code fences, and no explanations.
+- Output exactly one PHONETIC line: PHONETIC|<value or empty>
+- Output exactly one LEMMA line: LEMMA|<value or empty>
+- Output exactly one PLURAL line: PLURAL|<value or empty>
+- Output exactly one MORPH line: MORPH|<value or empty>
+- For source-language gender hints, output zero to three lines: GENDER|<masculine|feminine|neuter>|<article>|<word>
+- For each target language, output up to 3 lines: SIMILAR|<language code>|<similar word>
+- Finish with exactly one line: DONE
+- Never use the pipe character inside field values.
+- Metadata must refer to the resolved source word. If correctedSourceWord is non-empty, use that corrected word.
+- If a standard IPA or ordinary phonetic transcription is known for the resolved source word, PHONETIC must not be empty.
+- For nouns, PLURAL should be the noun plural form when known; otherwise keep it empty.
+- similar words must be in the target language only and must not duplicate the direct translation for that target language.`;
+const WORD_PHONETIC_FALLBACK_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return one compact phonetic line only.";
+const WORD_PHONETIC_FALLBACK_PROMPT_RULES = `Rules:
+- No markdown, no code fences, and no explanations.
+- Output exactly one line: PHONETIC|<IPA or ordinary phonetic transcription>
+- If no reliable transcription is known, keep the value empty after the pipe.
+- Finish with exactly one line: DONE
+- Never use the pipe character inside field values.`;
+const TEXT_SYSTEM_PROMPT = "You are a multilingual translation assistant. Return plain text only.";
+export const TEXT_TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
+const TEXT_PROMPT_RULES = `Rules:
 - No markdown and no code fences.
 - Provide natural and faithful direct translations.
 - Keep punctuation and intent.
-- Keep exactly one CSV row for each target language code, and keep the same order as target language codes.
-- Use RFC4180 CSV escaping. Always quote translatedText with double quotes.
-- If translated text has line breaks, replace each line break with literal \\n.`;
+- Return exactly one translated segment for each target language code, and keep the same order as target language codes.
+- After each translated segment, output the separator ${TEXT_TRANSLATION_STREAM_SEPARATOR}
+- Do not include language labels, numbering, explanations, or extra separators.
+- Do not omit the separator after the final translated segment.
+- If translated text has line breaks, keep them as normal text.`;
 
 function buildWordUserPrompt(input: TranslateInput): string {
   return [
@@ -103,12 +118,44 @@ function buildWordUserPrompt(input: TranslateInput): string {
   ].join("\n");
 }
 
-function buildWordRetryPrompt(input: TranslateInput, strictPromptHint: string): string {
+function buildWordFastStreamUserPrompt(input: TranslateInput): string {
   return [
-    buildWordUserPrompt(input),
-    "Validation pass:",
-    strictPromptHint.trimEnd(),
-    WORD_RETRY_RULES
+    `Translate this source word: "${input.sourceWord}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    WORD_FAST_STREAM_PROMPT_RULES
+  ].join("\n");
+}
+
+function buildWordDetailStreamUserPrompt(input: TranslateInput, fastPayload: TranslationPayload): string {
+  const resolvedWord = fastPayload.correctedSourceWord?.trim() || input.sourceWord;
+  const knownTranslations = fastPayload.translations
+    .map((item) => `${item.targetLanguage}: ${item.directTranslation || "(empty)"}`)
+    .join("\n");
+  const suggestions = (fastPayload.suggestedSourceWords ?? []).join(", ");
+
+  return [
+    `Original source word: "${input.sourceWord}"`,
+    `Resolved source word: "${resolvedWord}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    `Known part of speech: ${fastPayload.sourcePartOfSpeech ?? "unknown"}`,
+    `Known correctedSourceWord: ${fastPayload.correctedSourceWord ?? ""}`,
+    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    `Known direct translations by target language:\n${knownTranslations}`,
+    `Known source suggestions: ${suggestions}`,
+    WORD_DETAIL_STREAM_PROMPT_RULES
+  ].join("\n");
+}
+
+function buildWordPhoneticFallbackUserPrompt(input: TranslateInput, fastPayload: TranslationPayload): string {
+  const resolvedWord = fastPayload.correctedSourceWord?.trim() || input.sourceWord;
+
+  return [
+    `Source word: "${resolvedWord}"`,
+    `Original query word: "${input.sourceWord}"`,
+    `Source language code: ${input.sourceLanguage}`,
+    `Known part of speech: ${fastPayload.sourcePartOfSpeech ?? "unknown"}`,
+    WORD_PHONETIC_FALLBACK_PROMPT_RULES
   ].join("\n");
 }
 
@@ -118,15 +165,6 @@ function buildTextUserPrompt(input: TranslateTextInput): string {
     `Source language code: ${input.sourceLanguage}`,
     `Target language codes: ${input.targetLanguages.join(", ")}`,
     TEXT_PROMPT_RULES
-  ].join("\n");
-}
-
-function buildWordSuggestionPrompt(input: TranslateInput): string {
-  return [
-    `Misspelled source word: "${input.sourceWord}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    WORD_SUGGEST_RESPONSE_SCHEMA,
-    WORD_SUGGEST_RULES
   ].join("\n");
 }
 
@@ -340,11 +378,6 @@ function normalizePayload(raw: unknown, input: TranslateInput): TranslationPaylo
   };
 }
 
-function shouldRefineCorrectedWordPayload(input: TranslateInput, payload: TranslationPayload): boolean {
-  const corrected = payload.correctedSourceWord?.trim() ?? "";
-  return Boolean(corrected) && normalizeWord(corrected) !== normalizeWord(input.sourceWord);
-}
-
 function hasSuspiciousTargetLanguageLeakage(input: TranslateInput, payload: TranslationPayload): boolean {
   const sourceCandidates = buildSourceCandidates(input, payload);
 
@@ -355,17 +388,6 @@ function hasSuspiciousTargetLanguageLeakage(input: TranslateInput, payload: Tran
 
     return directSuspicious || suspiciousSimilarCount > 0;
   });
-}
-
-function shouldSuggestCandidates(input: TranslateInput, payload: TranslationPayload): boolean {
-  const hasResolvedTranslations = payload.translations.some(
-    (item) => Boolean(item.directTranslation) || item.similarWords.length > 0
-  );
-  const hasConfidentCorrection =
-    Boolean(payload.correctedSourceWord?.trim()) && normalizeWord(payload.correctedSourceWord ?? "") !== normalizeWord(input.sourceWord);
-  const hasSuggestions = (payload.suggestedSourceWords?.length ?? 0) > 0;
-
-  return !hasResolvedTranslations && !hasConfidentCorrection && !hasSuggestions;
 }
 
 function hasResolvedWordResult(payload: TranslationPayload): boolean {
@@ -388,29 +410,6 @@ function clearSuggestionsIfResolved(payload: TranslationPayload): TranslationPay
   return {
     ...payload,
     suggestedSourceWords: []
-  };
-}
-
-function mergeCorrectedWordPayload(
-  originalPayload: TranslationPayload,
-  correctedPayload: TranslationPayload
-): TranslationPayload {
-  return {
-    ...originalPayload,
-    sourcePhonetic: correctedPayload.sourcePhonetic || originalPayload.sourcePhonetic || "",
-    sourcePartOfSpeech: correctedPayload.sourcePartOfSpeech || originalPayload.sourcePartOfSpeech || "unknown",
-    sourceLemma: correctedPayload.sourceLemma || originalPayload.sourceLemma || "",
-    sourcePluralForm: correctedPayload.sourcePluralForm || originalPayload.sourcePluralForm || "",
-    sourceMorphology: correctedPayload.sourceMorphology || originalPayload.sourceMorphology || "",
-    suggestedSourceWords:
-      (correctedPayload.suggestedSourceWords?.length ?? 0) > 0
-        ? correctedPayload.suggestedSourceWords
-        : (originalPayload.suggestedSourceWords ?? []),
-    sourceGenderHints:
-      (correctedPayload.sourceGenderHints?.length ?? 0) > 0
-        ? correctedPayload.sourceGenderHints
-        : (originalPayload.sourceGenderHints ?? []),
-    translations: correctedPayload.translations.length > 0 ? correctedPayload.translations : originalPayload.translations
   };
 }
 
@@ -439,13 +438,6 @@ function sanitizeTranslationsAgainstSource(input: TranslateInput, payload: Trans
   };
 }
 
-function createSuggestionOnlyPayload(input: TranslateInput, suggestions: string[]): TranslationPayload {
-  return {
-    ...createEmptyWordPayload(input),
-    suggestedSourceWords: suggestions
-  };
-}
-
 function applySourceLanguageOverrides(input: TranslateInput, payload: TranslationPayload): TranslationPayload {
   const candidateWords = [
     payload.correctedSourceWord ?? "",
@@ -467,26 +459,6 @@ function applySourceLanguageOverrides(input: TranslateInput, payload: Translatio
   }
 
   return payload;
-}
-
-function hasLanguageGuardrailConflict(input: TranslateInput, payload: TranslationPayload): boolean {
-  const candidateWords = [
-    payload.correctedSourceWord ?? "",
-    payload.sourceWord ?? "",
-    input.sourceWord
-  ].filter(Boolean);
-
-  for (const word of candidateWords) {
-    const rule = getLanguageWordGuardrail(input.sourceLanguage, word);
-    if (!rule) {
-      continue;
-    }
-
-    const partOfSpeech = normalizePartOfSpeech(payload.sourcePartOfSpeech);
-    return partOfSpeech !== rule.partOfSpeech;
-  }
-
-  return false;
 }
 
 function parseCsvRows(csv: string): string[][] {
@@ -645,26 +617,6 @@ function hasMeaningfulWordPayload(payload: TranslationPayload): boolean {
   );
 
   return hasSourceMeta || hasTranslations;
-}
-
-function createEmptyWordPayload(input: TranslateInput): TranslationPayload {
-  return {
-    sourceWord: input.sourceWord,
-    sourceLanguage: input.sourceLanguage,
-    sourcePhonetic: "",
-    correctedSourceWord: "",
-    suggestedSourceWords: [],
-    sourcePartOfSpeech: "unknown",
-    sourceLemma: "",
-    sourcePluralForm: "",
-    sourceMorphology: "",
-    sourceGenderHints: [],
-    translations: input.targetLanguages.map((targetLanguage) => ({
-      targetLanguage,
-      directTranslation: "",
-      similarWords: []
-    }))
-  };
 }
 
 function normalizePayloadFromCsv(csv: string, input: TranslateInput): TranslationPayload {
@@ -827,49 +779,6 @@ function parseWordPayloadFlexible(content: string, input: TranslateInput): Trans
   return createEmptyWordPayload(input);
 }
 
-function parseSuggestedWordsContent(content: string): string[] {
-  try {
-    const parsed = JSON.parse(content) as { suggestedSourceWords?: unknown };
-    return parseSuggestedSourceWords(parsed.suggestedSourceWords);
-  } catch {
-    return [];
-  }
-}
-
-type RequestBudget = {
-  deadlineAt: number;
-};
-
-function createRequestBudget(totalMs: number): RequestBudget {
-  return {
-    deadlineAt: Date.now() + Math.max(1000, totalMs)
-  };
-}
-
-function getRemainingBudgetMs(budget?: RequestBudget): number {
-  if (!budget) {
-    return OPENAI_TIMEOUT_MS;
-  }
-
-  return budget.deadlineAt - Date.now();
-}
-
-function hasBudgetForFollowup(budget?: RequestBudget, minRequiredMs = OPENAI_FOLLOWUP_MIN_BUDGET_MS): boolean {
-  return getRemainingBudgetMs(budget) > minRequiredMs;
-}
-
-async function requestWordSuggestions(input: TranslateInput, apiKey: string, budget?: RequestBudget): Promise<string[]> {
-  const content = await requestOpenAIContent({
-    apiKey,
-    systemPrompt: WORD_SUGGEST_SYSTEM_PROMPT,
-    userPrompt: buildWordSuggestionPrompt(input),
-    maxTokens: Math.min(OPENAI_MAX_TOKENS, 120),
-    logLabel: "openai:word-suggest"
-  });
-
-  return parseSuggestedWordsContent(content);
-}
-
 async function requestOpenAIContent(params: {
   apiKey: string;
   baseUrl?: string;
@@ -880,15 +789,10 @@ async function requestOpenAIContent(params: {
 }): Promise<string> {
   const { apiKey, baseUrl, systemPrompt, userPrompt, maxTokens, logLabel } = params;
 
-  // const timeoutMs = Math.max(1, Math.min(OPENAI_TIMEOUT_MS, remainingBudgetMs));
-  // const startedAt = performance.now();
   const client = createOpenAIClient({
     apiKey,
-    baseUrl,
-    // timeoutMs
+    baseUrl
   });
-  // const controller = new AbortController();
-  // const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let status = 200;
   try {
@@ -901,14 +805,8 @@ async function requestOpenAIContent(params: {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ]
-      },
-      // {
-      //   signal: controller.signal
-      // }
+      }
     );
-
-    // const elapsed = performance.now() - startedAt;
-    // console.log(`[${logLabel}] model=${MODEL} status=${status} duration=${elapsed.toFixed(2)} ms`);
 
     const content = completion.choices?.[0]?.message?.content;
     if (!content) {
@@ -917,11 +815,6 @@ async function requestOpenAIContent(params: {
 
     return content;
   } catch (error) {
-    // const elapsed = performance.now() - startedAt;
-    // if (error instanceof Error && error.name === "AbortError") {
-    //   throw new Error(`${logLabel} timed out after ${timeoutMs} ms`);
-    // }
-
     const errorStatus =
       error && typeof error === "object" && "status" in error && typeof error.status === "number"
         ? error.status
@@ -930,58 +823,50 @@ async function requestOpenAIContent(params: {
       status = errorStatus;
     }
 
-    // console.log(`[${logLabel}] model=${MODEL} status=${status} duration=${elapsed.toFixed(2)} ms`);
     throw new Error(
       `${logLabel} : ${error instanceof Error ? error.message : "Unknown SDK error"}`
     );
-    // throw new Error(
-    //   `${logLabel} failed after ${elapsed.toFixed(2)} ms: ${error instanceof Error ? error.message : "Unknown SDK error"}`
-    // );
-  } finally {
-    // clearTimeout(timeoutId);
   }
 }
 
-function normalizeTextPayloadFromCsv(csv: string, input: TranslateTextInput): TextTranslationPayload {
-  const parsedRows = parseCsvRows(csv.trim());
-  const hasHeader =
-    parsedRows.length > 0 &&
-    toText(parsedRows[0]?.[0]).toLowerCase() === "targetlanguage" &&
-    toText(parsedRows[0]?.[1]).toLowerCase() === "translatedtext";
+async function requestOpenAIContentStream(params: {
+  apiKey: string;
+  systemPrompt: string;
+  userPrompt: string;
+  maxTokens: number;
+}): Promise<AsyncIterable<string>> {
+  const { apiKey, systemPrompt, userPrompt, maxTokens } = params;
 
-  const dataRows = hasHeader ? parsedRows.slice(1) : parsedRows;
-  const translationMap = new Map<string, string>();
+  const client = createOpenAIClient({
+    apiKey
+  });
 
-  for (const row of dataRows) {
-    const targetLanguage = toText(row[0]).toLowerCase();
-    if (!targetLanguage || translationMap.has(targetLanguage)) {
-      continue;
-    }
-
-    const translatedText = toText(row[1]).replace(/\\n/g, "\n");
-    translationMap.set(targetLanguage, translatedText);
-  }
+  const stream = await client.chat.completions.create({
+    model: MODEL,
+    temperature: 0,
+    max_tokens: maxTokens,
+    stream: true,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ]
+  });
 
   return {
-    sourceText: input.sourceText,
-    sourceLanguage: input.sourceLanguage,
-    translations: input.targetLanguages.map((targetLanguage) => ({
-      targetLanguage,
-      translatedText: translationMap.get(targetLanguage) ?? ""
-    }))
+    async *[Symbol.asyncIterator]() {
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          yield delta;
+        }
+      }
+    }
   };
 }
 
 async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<TranslationPayload> {
-  // const budget = createRequestBudget(OPENAI_TOTAL_TIMEOUT_MS);
-
   const requestWordPayload = async (requestInput: TranslateInput): Promise<TranslationPayload> => {
     const baseUserPrompt = buildWordUserPrompt(requestInput);
-    const strictRule = getLanguageWordGuardrail(requestInput.sourceLanguage, requestInput.sourceWord);
-    const strictPromptHint = strictRule
-      ? `- Strict check for this token: in language ${requestInput.sourceLanguage}, "${requestInput.sourceWord}" should be ${strictRule.partOfSpeech}.\n`
-      : "- Strict check: if the token is a cross-language homograph, still classify only by source language.\n";
-
     const content = await requestOpenAIContent({
       apiKey,
       systemPrompt: WORD_SYSTEM_PROMPT,
@@ -990,85 +875,11 @@ async function fetchWordPayload(input: TranslateInput, apiKey: string): Promise<
       logLabel: "openai:word"
     });
 
-    let payload = parseWordPayloadFlexible(content, requestInput);
-    // const needsRetry =
-    //   !hasMeaningfulWordPayload(payload) ||
-    //   hasLanguageGuardrailConflict(requestInput, payload) ||
-    //   hasSuspiciousTargetLanguageLeakage(requestInput, payload);
-
-    // if (needsRetry && hasBudgetForFollowup(budget)) {
-    //   const retryContent = await requestOpenAIContent({
-    //     apiKey,
-    //     systemPrompt: WORD_SYSTEM_PROMPT,
-    //     userPrompt: buildWordRetryPrompt(requestInput, strictPromptHint),
-    //     maxTokens: OPENAI_MAX_TOKENS,
-    //     logLabel: "openai:word-retry",
-    //     budget
-    //   });
-
-    //   const retryPayload = parseWordPayloadFlexible(retryContent, requestInput);
-    //   if (hasMeaningfulWordPayload(retryPayload)) {
-    //     payload = retryPayload;
-    //   }
-    // } else if (needsRetry) {
-    //   console.warn("[openai:word] Skipped retry because the remaining request budget is too low.");
-    // }
-
+    const payload = parseWordPayloadFlexible(content, requestInput);
     return sanitizeTranslationsAgainstSource(requestInput, applySourceLanguageOverrides(requestInput, payload));
   };
 
-  let payload: TranslationPayload;
-  // try {
-    payload = await requestWordPayload(input);
-  // } catch (error) {
-    // try {
-    //   if (hasBudgetForFollowup(budget)) {
-    //     const suggestions = await requestWordSuggestions(input, apiKey, budget);
-    //     if (suggestions.length > 0) {
-    //       return createSuggestionOnlyPayload(input, suggestions);
-    //     }
-    //   } else {
-    //     console.warn("[openai:word] Skipped fallback suggestions because the remaining request budget is too low.");
-    //   }
-    // } catch {
-    //   // Fall through to original error below.
-    // }
-  //   throw error;
-  // }
-
-  if (shouldRefineCorrectedWordPayload(input, payload) 
-    // && hasBudgetForFollowup(budget)
-  ) {
-    const correctedWord = payload.correctedSourceWord!.trim();
-    try {
-      const correctedPayload = await requestWordPayload({
-        ...input,
-        sourceWord: correctedWord
-      });
-      payload = mergeCorrectedWordPayload(payload, correctedPayload);
-    } catch {
-      // Keep the original payload if the refinement pass fails or times out.
-    }
-  } else if (shouldRefineCorrectedWordPayload(input, payload)) {
-    console.warn("[openai:word] Skipped corrected-word refinement because the remaining request budget is too low.");
-  }
-
-  // if (shouldSuggestCandidates(input, payload) && hasBudgetForFollowup(budget)) {
-  //   try {
-  //     const suggestions = await requestWordSuggestions(input, apiKey, budget);
-  //     if (suggestions.length > 0) {
-  //       payload = {
-  //         ...payload,
-  //         suggestedSourceWords: suggestions
-  //       };
-  //     }
-  //   } catch {
-  //     // Keep the best payload we already have.
-  //   }
-  // } else if (shouldSuggestCandidates(input, payload)) {
-  //   console.warn("[openai:word] Skipped candidate suggestions because the remaining request budget is too low.");
-  // }
-
+  const payload = await requestWordPayload(input);
   return clearSuggestionsIfResolved(payload);
 }
 
@@ -1081,7 +892,63 @@ export async function translateWithOpenAI(input: TranslateInput): Promise<Transl
   return fetchWordPayload(input, apiKey);
 }
 
-export async function translateTextWithOpenAI(input: TranslateTextInput): Promise<TextTranslationPayload> {
+export function finalizeWordPayload(input: TranslateInput, payload: TranslationPayload): TranslationPayload {
+  const normalized = {
+    ...payload,
+    sourceWord: input.sourceWord,
+    sourceLanguage: input.sourceLanguage,
+    suggestedSourceWords: payload.suggestedSourceWords ?? [],
+    sourceGenderHints: payload.sourceGenderHints ?? [],
+    translations: input.targetLanguages.map((targetLanguage) => {
+      const item = payload.translations.find((entry) => entry.targetLanguage === targetLanguage);
+      return {
+        targetLanguage,
+        directTranslation: item?.directTranslation ?? "",
+        similarWords: item?.similarWords ?? []
+      };
+    })
+  };
+
+  return clearSuggestionsIfResolved(
+    sanitizeTranslationsAgainstSource(input, applySourceLanguageOverrides(input, normalized))
+  );
+}
+
+export async function streamWordFastTranslationWithOpenAI(input: TranslateInput): Promise<AsyncIterable<string>> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  return requestOpenAIContentStream({
+    apiKey,
+    systemPrompt: WORD_FAST_STREAM_SYSTEM_PROMPT,
+    userPrompt: buildWordFastStreamUserPrompt(input),
+    maxTokens: OPENAI_MAX_TOKENS
+  });
+}
+
+export async function streamWordDetailTranslationWithOpenAI(
+  input: TranslateInput,
+  fastPayload: TranslationPayload
+): Promise<AsyncIterable<string>> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  return requestOpenAIContentStream({
+    apiKey,
+    systemPrompt: WORD_DETAIL_STREAM_SYSTEM_PROMPT,
+    userPrompt: buildWordDetailStreamUserPrompt(input, fastPayload),
+    maxTokens: OPENAI_MAX_TOKENS
+  });
+}
+
+export async function requestWordPhoneticFallbackLine(
+  input: TranslateInput,
+  fastPayload: TranslationPayload
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is missing");
@@ -1089,12 +956,45 @@ export async function translateTextWithOpenAI(input: TranslateTextInput): Promis
 
   const content = await requestOpenAIContent({
     apiKey,
-    systemPrompt: TEXT_SYSTEM_PROMPT,
-    userPrompt: buildTextUserPrompt(input),
-    maxTokens: OPENAI_TEXT_MAX_TOKENS,
-    logLabel: "openai:text",
-    // budget: createRequestBudget(Math.min(OPENAI_TIMEOUT_MS, OPENAI_TOTAL_TIMEOUT_MS))
+    systemPrompt: WORD_PHONETIC_FALLBACK_SYSTEM_PROMPT,
+    userPrompt: buildWordPhoneticFallbackUserPrompt(input, fastPayload),
+    maxTokens: 48,
+    logLabel: "openai:word:phonetic"
   });
 
-  return normalizeTextPayloadFromCsv(content, input);
+  return content.trim();
+}
+
+export function normalizeTextPayloadFromStreamContent(content: string, input: TranslateTextInput): TextTranslationPayload {
+  const segments = content
+    .split(TEXT_TRANSLATION_STREAM_SEPARATOR)
+    .map((segment) => segment.trim())
+    .filter((segment, index, values) => Boolean(segment) || index < values.length - 1);
+
+  return {
+    sourceText: input.sourceText,
+    sourceLanguage: input.sourceLanguage,
+    translations: input.targetLanguages.map((targetLanguage, index) => ({
+      targetLanguage,
+      translatedText: segments[index] ?? ""
+    }))
+  };
+}
+
+export function serializeTextTranslationPayload(payload: TextTranslationPayload): string {
+  return `${payload.translations.map((item) => item.translatedText).join(TEXT_TRANSLATION_STREAM_SEPARATOR)}${TEXT_TRANSLATION_STREAM_SEPARATOR}`;
+}
+
+export async function streamTextTranslationWithOpenAI(input: TranslateTextInput): Promise<AsyncIterable<string>> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  return requestOpenAIContentStream({
+    apiKey,
+    systemPrompt: TEXT_SYSTEM_PROMPT,
+    userPrompt: buildTextUserPrompt(input),
+    maxTokens: OPENAI_TEXT_MAX_TOKENS
+  });
 }

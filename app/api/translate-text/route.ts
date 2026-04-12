@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { translateTextWithOpenAI } from "@/lib/openai-translate";
+import {
+  normalizeTextPayloadFromStreamContent,
+  serializeTextTranslationPayload,
+  streamTextTranslationWithOpenAI
+} from "@/lib/openai-translate";
 import { resolveApiErrorStatus, toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
+import { runInBackground } from "@/lib/background-task";
 
 export const runtime = "nodejs";
 
@@ -14,8 +19,6 @@ type TranslateTextRequest = {
 };
 
 type ParsedRequest = { sourceText: string; sourceLanguage: string; targetLanguages: string[] };
-
-const inFlightTranslations = new Map<string, ReturnType<typeof translateTextWithOpenAI>>();
 
 function normalizeCode(value: string): string {
   return value.trim().toLowerCase();
@@ -55,23 +58,6 @@ function parseBody(raw: TranslateTextRequest): ParsedRequest {
   return { sourceText, sourceLanguage, targetLanguages };
 }
 
-async function getOrCreateTranslation(cacheKey: string, payload: ParsedRequest) {
-  const existing = inFlightTranslations.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-
-  const task = (async () => {
-    const translated = await translateTextWithOpenAI(payload);
-    return translated;
-  })().finally(() => {
-    inFlightTranslations.delete(cacheKey);
-  });
-
-  inFlightTranslations.set(cacheKey, task);
-  return task;
-}
-
 function makeCacheKey(sourceText: string, sourceLanguage: string, targetLanguages: string[]): string {
   const base = JSON.stringify({
     v: 1,
@@ -103,25 +89,55 @@ export async function POST(request: Request) {
     const cachedData = await getCachedTranslation(cacheKey);
     if (cachedData) {
       console.log(`[translate:text] DynamoDB cache hit for: ${cacheKey}`);
-      return NextResponse.json({
-        fromCache: true,
-        data: cachedData
+      return new Response(serializeTextTranslationPayload(cachedData), {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Polyglot-From-Cache": "true"
+        }
       });
     }
 
-    const translated = await getOrCreateTranslation(cacheKey, payload); 
-    cacheTranslation(
-      cacheKey,
-      payload.sourceText,
-      payload.sourceLanguage,
-      payload.targetLanguages,
-      translated,
-      "text"
-    );
+    const encoder = new TextEncoder();
+    let streamedContent = "";
 
-    return NextResponse.json({
-      fromCache: false,
-      data: translated
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          const openAiStream = await streamTextTranslationWithOpenAI(payload);
+          for await (const chunk of openAiStream) {
+            streamedContent += chunk;
+            controller.enqueue(encoder.encode(chunk));
+          }
+
+          const translated = normalizeTextPayloadFromStreamContent(streamedContent, payload);
+          controller.close();
+          runInBackground(
+            () =>
+              cacheTranslation(
+                cacheKey,
+                payload.sourceText,
+                payload.sourceLanguage,
+                payload.targetLanguages,
+                translated,
+                "text"
+              ),
+            `cache translation for ${cacheKey}`
+          );
+        } catch (streamError) {
+          controller.error(streamError);
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "X-Polyglot-From-Cache": "false"
+      }
     });
   } catch (error) {
     const message = toEnglishApiErrorMessage(error);

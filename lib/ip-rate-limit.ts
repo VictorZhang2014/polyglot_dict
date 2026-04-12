@@ -1,5 +1,6 @@
 import { docClient } from "./dynamodb";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { runInBackground } from "./background-task";
 
 const MIN_INTERVAL_MS = 3000;
 const DAILY_LIMIT = 50;
@@ -226,19 +227,22 @@ async function checkIpRateLimitDynamoDb(request: Request): Promise<IpRateLimitRe
       }
     }
 
-    // Pass first checks, now atomicaly increment and update timestamp
-    await docClient.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { id: limitKey },
-        UpdateExpression:
-          "SET dailyCount = if_not_exists(dailyCount, :zero) + :inc, lastRequestAt = :now, createdAt = if_not_exists(createdAt, :now)",
-        ExpressionAttributeValues: {
-          ":inc": 1,
-          ":zero": 0,
-          ":now": now
-        }
-      })
+    runInBackground(
+      () =>
+        docClient.send(
+          new UpdateCommand({
+            TableName: tableName,
+            Key: { id: limitKey },
+            UpdateExpression:
+              "SET dailyCount = if_not_exists(dailyCount, :zero) + :inc, lastRequestAt = :now, createdAt = if_not_exists(createdAt, :now)",
+            ExpressionAttributeValues: {
+              ":inc": 1,
+              ":zero": 0,
+              ":now": now
+            }
+          })
+        ),
+      `persist ip rate limit for ${limitKey}`
     );
 
     return { allowed: true };

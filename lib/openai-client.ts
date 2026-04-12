@@ -13,14 +13,15 @@ function normalizeOpenAIBaseUrl(baseUrl?: string | null): string {
 
 export function createOpenAIClient(params: {
   apiKey: string;
-  baseUrl?: string | null; 
+  baseUrl?: string | null;
+  timeoutMs?: number;
 }): OpenAI {
-  const { apiKey, baseUrl } = params;
+  const { apiKey, baseUrl, timeoutMs } = params;
 
   return new OpenAI({
     apiKey,
     baseURL: normalizeOpenAIBaseUrl(baseUrl),
     maxRetries: 0,
-    // timeout: timeoutMs
+    ...(typeof timeoutMs === "number" ? { timeout: timeoutMs } : {})
   });
 }
