@@ -7,6 +7,7 @@ import { InfoCircledIcon, MagnifyingGlassIcon, SpeakerLoudIcon } from "@radix-ui
 import { Badge, Box, Callout, Card, Flex, Grid, Heading, Select, Text } from "@radix-ui/themes";
 import { addQueryHistory } from "@/lib/history-storage";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
+import { fetchWithSingleRetryOn500 } from "@/lib/retryable-fetch";
 import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/settings-storage";
 import { buildTranslationCacheKey, getTranslationCacheEntry, setTranslationCacheEntry } from "@/lib/translation-cache-indexeddb";
 import { TranslateApiResponse, TranslationPayload } from "@/lib/types";
@@ -482,7 +483,7 @@ export default function HomePage() {
         }
       }
 
-      const res = await fetch("/api/translate", {
+      const res = await fetchWithSingleRetryOn500("/api/translate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

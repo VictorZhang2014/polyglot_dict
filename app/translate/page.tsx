@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DiscIcon, InfoCircledIcon, SpeakerLoudIcon, StopIcon } from "@radix-ui/react-icons";
 import { Badge, Button, Callout, Card, Flex, Grid, Heading, Select, Text, TextArea } from "@radix-ui/themes";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
+import { fetchWithSingleRetryOn500 } from "@/lib/retryable-fetch";
 import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/settings-storage";
 import { TranslateTextApiResponse } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
@@ -152,7 +153,7 @@ export default function TranslatePage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/translate-text", {
+      const res = await fetchWithSingleRetryOn500("/api/translate-text", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
