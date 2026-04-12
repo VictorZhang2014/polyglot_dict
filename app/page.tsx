@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { InfoCircledIcon, MagnifyingGlassIcon, SpeakerLoudIcon } from "@radix-ui/react-icons";
@@ -11,6 +12,7 @@ import { buildTranslationCacheKey, getTranslationCacheEntry, setTranslationCache
 import { TranslateApiResponse, TranslationPayload } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
 import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
+import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
@@ -420,6 +422,16 @@ export default function HomePage() {
 
     return repeatsPluralInfo ? "" : sourceMorphology;
   }, [sourceMorphology, sourcePluralForm, sourcePartOfSpeech]);
+  const conjugationSourceWord = useMemo(() => {
+    if (sourcePartOfSpeech.toLowerCase() !== "verb") {
+      return "";
+    }
+
+    return sourceLemma || correctedSourceWord || displaySourceWord;
+  }, [sourcePartOfSpeech, sourceLemma, correctedSourceWord, displaySourceWord]);
+  const showVerbConjugationLink = Boolean(
+    conjugationSourceWord && supportsVerbConjugationLanguage(sourceLanguage) && sourcePartOfSpeech.toLowerCase() === "verb"
+  );
   const isTimeoutError = useMemo(() => {
     return error.toLowerCase().includes("timed out");
   }, [error]);
@@ -714,6 +726,16 @@ export default function HomePage() {
             </Flex>
             {sourceMetaLine ? <Text className="query-analysis-hint">{sourceMetaLine}</Text> : null}
             {displaySourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: displaySourceMorphology })}</Text> : null}
+            {showVerbConjugationLink ? (
+              <Text className="query-analysis-hint">
+                <Link
+                  className="query-conjugation-link"
+                  href={`/conjugation?q=${encodeURIComponent(conjugationSourceWord)}&code=${encodeURIComponent(sourceLanguage)}`}
+                >
+                  {t("home.showConjugation")}
+                </Link>
+              </Text>
+            ) : null}
             {suggestedSourceWords.length > 0 ? (
               <Box>
                 <Text className="word-label" mb="2">
