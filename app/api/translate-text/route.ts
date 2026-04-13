@@ -11,6 +11,8 @@ import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 import { runInBackground } from "@/lib/background-task";
 
 export const runtime = "nodejs";
+export const dynamic = 'force-dynamic'; // To prevent errors while building
+export const maxDuration = 60;          // Timeout setup for Amplify v2, the maximum is 60s
 
 type TranslateTextRequest = {
   sourceText?: unknown;
