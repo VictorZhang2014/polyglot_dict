@@ -3,6 +3,7 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 export default function nextConfig(phase) {
   return {
     reactStrictMode: true,
+    output: 'standalone',
     // Keep development and production artifacts separate so `next dev` and `next build`
     // do not corrupt each other's server chunk graph.
     distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
