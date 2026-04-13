@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
 import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
-const TRANSLATE_STREAM_URL = process.env.NEXT_PUBLIC_TRANSLATE_STREAM_URL?.trim() ?? "";
+const TRANSLATE_STREAM_URL = process.env.AI_AWS_LAMBDA_TRANSLATE_STREAM_URL?.trim() ?? "";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
   en: "en-US",
