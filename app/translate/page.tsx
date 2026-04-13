@@ -11,7 +11,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { readSseMessages } from "@/lib/sse";
 
 const TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
-const TRANSLATE_STREAM_URL = process.env.AI_AWS_LAMBDA_TRANSLATE_STREAM_URL?.trim() ?? "";
+const TRANSLATE_STREAM_URL = process.env.NEXT_PUBLIC_LAMBDA_TRANSLATE_STREAM_URL?.trim() ?? "";
 const LANGUAGE_FLAGS: Record<string, string> = {
   de: "🇩🇪",
   en: "🇬🇧",
