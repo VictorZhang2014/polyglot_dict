@@ -5,6 +5,7 @@ import {
   TranslationPayload
 } from "@/lib/types";
 import { getLanguageWordGuardrail } from "@/lib/language-guardrails";
+import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
 import { createOpenAIClient } from "@/lib/openai-client";
 import { createEmptyWordPayload } from "@/lib/word-stream-protocol";
 
@@ -26,8 +27,7 @@ const OPENAI_TEXT_MAX_TOKENS = Number.parseInt(process.env.OPENAI_TEXT_MAX_TOKEN
 const GENDERED_LANGUAGE_CODES = new Set(["de", "fr", "es", "it", "pt", "ru", "ar"]);
 const WORD_TARGET_SIMILAR_LIMIT = 3;
 const WORD_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return strict JSON only.";
-const WORD_FAST_STREAM_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return compact plain-text event lines only.";
-const WORD_DETAIL_STREAM_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return compact plain-text detail lines only.";
+const WORD_STREAM_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return compact plain-text event lines only.";
 const WORD_PROMPT_RESPONSE_SCHEMA = `Return exactly one JSON object with this schema (no markdown, no code fences, no extra text):
 {
   "sourcePhonetic": string,
@@ -49,6 +49,17 @@ const WORD_PROMPT_RESPONSE_SCHEMA = `Return exactly one JSON object with this sc
 const WORD_PROMPT_RULES = `Rules:
 - Analyze the source token strictly within the provided source language only; ignore homographs from other languages.
 - Example: when source language is de, token "die" is a determiner/article, not an English verb.
+- Treat sourceLanguage as authoritative. Do not reinterpret the token as belonging to another language because that other-language reading is more frequent, more common on the web, or more familiar.
+- If the token is a valid lexical item in the provided source language, you must analyze and translate it as that source-language item, even when the same spelling is also a common word in another language.
+- For short or ambiguous tokens, prefer the provided source language over all cross-language homograph interpretations.
+- Only return suggestions when the token is not plausibly a valid item in the provided source language.
+- If multiple senses exist within the provided source language, choose the most standard source-language sense rather than switching languages.
+- Examples:
+- sourceLanguage=de, sourceWord="die" => German determiner/article, not English verb.
+- sourceLanguage=de, sourceWord="je" => German particle/adverb meaning "each/per", not French pronoun.
+- sourceLanguage=de, sourceWord="links" => German adverb/adjective meaning "left", not English noun/verb.
+- sourceLanguage=fr, sourceWord="je" => French pronoun, not German particle.
+- sourceLanguage=en, sourceWord="links" => English noun/verb, not German adverb/adjective.
 - If the input spelling is wrong, interpret and translate the corrected word, and ensure all metadata refers to that corrected word.
 - If you are not confident what the intended source word is, keep translations empty, keep correctedSourceWord empty, and return 3-5 likely source-language candidates in suggestedSourceWords.
 - sourcePhonetic must match the final valid source word: if correctedSourceWord is non-empty, sourcePhonetic must be for correctedSourceWord; otherwise it must be for the original input.
@@ -64,19 +75,13 @@ const WORD_PROMPT_RULES = `Rules:
 - Return 1 reliable directTranslation and up to 3 reliable similarWords for each target language.
 - If you are unsure, prefer fewer items instead of guessing or mixing languages.
 - similarWords must not duplicate directTranslation.`;
-const WORD_FAST_STREAM_PROMPT_RULES = `Rules:
+const WORD_STREAM_PROMPT_RULES = `Rules:
 - No markdown, no code fences, and no explanations.
-- Output exactly one CORRECTED line: CORRECTED|<corrected word or empty>
-- Output exactly one POS line: POS|<noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|numeral|particle|determiner|unknown>
+- Output exactly one CORRECTED line first: CORRECTED|<corrected word or empty>
+- Output exactly one POS line next: POS|<noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|numeral|particle|determiner|unknown>
 - If you are not confident what the intended source word is, keep CORRECTED empty unless the spelling correction is obvious, keep POS as unknown, keep all TRANS values empty, and output 3-5 SUGGEST lines.
 - For likely alternatives, output up to 5 lines: SUGGEST|<candidate>
-- For each target language code, output exactly one line in the same order: TRANS|<language code>|<direct translation or empty>
-- Finish with exactly one line: DONE
-- Never use the pipe character inside field values.
-- direct translations must be natural lexical items in the target language only.
-- If the source spelling is already correct, keep the CORRECTED value empty after the pipe.`;
-const WORD_DETAIL_STREAM_PROMPT_RULES = `Rules:
-- No markdown, no code fences, and no explanations.
+- For each target language code, output exactly one TRANS line in the same order: TRANS|<language code>|<direct translation or empty>
 - Output exactly one PHONETIC line: PHONETIC|<value or empty>
 - Output exactly one LEMMA line: LEMMA|<value or empty>
 - Output exactly one PLURAL line: PLURAL|<value or empty>
@@ -85,17 +90,15 @@ const WORD_DETAIL_STREAM_PROMPT_RULES = `Rules:
 - For each target language, output up to 3 lines: SIMILAR|<language code>|<similar word>
 - Finish with exactly one line: DONE
 - Never use the pipe character inside field values.
-- Metadata must refer to the resolved source word. If correctedSourceWord is non-empty, use that corrected word.
+- direct translations and similar words must be natural lexical items in the target language only.
+- Treat sourceLanguage as authoritative and never switch to another language's interpretation of the source token.
+- For short or ambiguous tokens, prefer the provided source language over all cross-language homograph interpretations.
+- If the token is valid in the provided source language, do not output another language's meaning.
+- Metadata must refer to the resolved source word. If correctedSourceWord is non-empty, use that corrected word for PHONETIC, LEMMA, PLURAL, and MORPH.
+- If the source spelling is already correct, keep the CORRECTED value empty after the pipe.
 - If a standard IPA or ordinary phonetic transcription is known for the resolved source word, PHONETIC must not be empty.
 - For nouns, PLURAL should be the noun plural form when known; otherwise keep it empty.
-- similar words must be in the target language only and must not duplicate the direct translation for that target language.`;
-const WORD_PHONETIC_FALLBACK_SYSTEM_PROMPT = "You are a multilingual dictionary assistant. Return one compact phonetic line only.";
-const WORD_PHONETIC_FALLBACK_PROMPT_RULES = `Rules:
-- No markdown, no code fences, and no explanations.
-- Output exactly one line: PHONETIC|<IPA or ordinary phonetic transcription>
-- If no reliable transcription is known, keep the value empty after the pipe.
-- Finish with exactly one line: DONE
-- Never use the pipe character inside field values.`;
+- similar words must not duplicate the direct translation for that target language.`;
 const TEXT_SYSTEM_PROMPT = "You are a multilingual translation assistant. Return plain text only.";
 export const TEXT_TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
 const TEXT_PROMPT_RULES = `Rules:
@@ -108,62 +111,39 @@ const TEXT_PROMPT_RULES = `Rules:
 - Do not omit the separator after the final translated segment.
 - If translated text has line breaks, keep them as normal text.`;
 
+function describeLanguage(code: string): string {
+  return `${getLanguageName(code, BUILTIN_LANGUAGES)} (${code})`;
+}
+
+function describeLanguages(codes: string[]): string {
+  return codes.map((code) => describeLanguage(code)).join(", ");
+}
+
 function buildWordUserPrompt(input: TranslateInput): string {
   return [
     `Translate this source word: "${input.sourceWord}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    `Source language: ${describeLanguage(input.sourceLanguage)}`,
+    `Target languages: ${describeLanguages(input.targetLanguages)}`,
     WORD_PROMPT_RESPONSE_SCHEMA,
     WORD_PROMPT_RULES
   ].join("\n");
 }
 
-function buildWordFastStreamUserPrompt(input: TranslateInput): string {
+function buildWordStreamUserPrompt(input: TranslateInput): string {
   return [
     `Translate this source word: "${input.sourceWord}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    `Target language codes: ${input.targetLanguages.join(", ")}`,
-    WORD_FAST_STREAM_PROMPT_RULES
-  ].join("\n");
-}
-
-function buildWordDetailStreamUserPrompt(input: TranslateInput, fastPayload: TranslationPayload): string {
-  const resolvedWord = fastPayload.correctedSourceWord?.trim() || input.sourceWord;
-  const knownTranslations = fastPayload.translations
-    .map((item) => `${item.targetLanguage}: ${item.directTranslation || "(empty)"}`)
-    .join("\n");
-  const suggestions = (fastPayload.suggestedSourceWords ?? []).join(", ");
-
-  return [
-    `Original source word: "${input.sourceWord}"`,
-    `Resolved source word: "${resolvedWord}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    `Known part of speech: ${fastPayload.sourcePartOfSpeech ?? "unknown"}`,
-    `Known correctedSourceWord: ${fastPayload.correctedSourceWord ?? ""}`,
-    `Target language codes: ${input.targetLanguages.join(", ")}`,
-    `Known direct translations by target language:\n${knownTranslations}`,
-    `Known source suggestions: ${suggestions}`,
-    WORD_DETAIL_STREAM_PROMPT_RULES
-  ].join("\n");
-}
-
-function buildWordPhoneticFallbackUserPrompt(input: TranslateInput, fastPayload: TranslationPayload): string {
-  const resolvedWord = fastPayload.correctedSourceWord?.trim() || input.sourceWord;
-
-  return [
-    `Source word: "${resolvedWord}"`,
-    `Original query word: "${input.sourceWord}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    `Known part of speech: ${fastPayload.sourcePartOfSpeech ?? "unknown"}`,
-    WORD_PHONETIC_FALLBACK_PROMPT_RULES
+    `Source language: ${describeLanguage(input.sourceLanguage)}`,
+    `Target languages: ${describeLanguages(input.targetLanguages)}`,
+    WORD_PROMPT_RULES,
+    WORD_STREAM_PROMPT_RULES
   ].join("\n");
 }
 
 function buildTextUserPrompt(input: TranslateTextInput): string {
   return [
     `Translate this source text: "${input.sourceText}"`,
-    `Source language code: ${input.sourceLanguage}`,
-    `Target language codes: ${input.targetLanguages.join(", ")}`,
+    `Source language: ${describeLanguage(input.sourceLanguage)}`,
+    `Target languages: ${describeLanguages(input.targetLanguages)}`,
     TEXT_PROMPT_RULES
   ].join("\n");
 }
@@ -914,7 +894,7 @@ export function finalizeWordPayload(input: TranslateInput, payload: TranslationP
   );
 }
 
-export async function streamWordFastTranslationWithOpenAI(input: TranslateInput): Promise<AsyncIterable<string>> {
+export async function streamWordTranslationWithOpenAI(input: TranslateInput): Promise<AsyncIterable<string>> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is missing");
@@ -922,47 +902,10 @@ export async function streamWordFastTranslationWithOpenAI(input: TranslateInput)
 
   return requestOpenAIContentStream({
     apiKey,
-    systemPrompt: WORD_FAST_STREAM_SYSTEM_PROMPT,
-    userPrompt: buildWordFastStreamUserPrompt(input),
+    systemPrompt: WORD_STREAM_SYSTEM_PROMPT,
+    userPrompt: buildWordStreamUserPrompt(input),
     maxTokens: OPENAI_MAX_TOKENS
   });
-}
-
-export async function streamWordDetailTranslationWithOpenAI(
-  input: TranslateInput,
-  fastPayload: TranslationPayload
-): Promise<AsyncIterable<string>> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing");
-  }
-
-  return requestOpenAIContentStream({
-    apiKey,
-    systemPrompt: WORD_DETAIL_STREAM_SYSTEM_PROMPT,
-    userPrompt: buildWordDetailStreamUserPrompt(input, fastPayload),
-    maxTokens: OPENAI_MAX_TOKENS
-  });
-}
-
-export async function requestWordPhoneticFallbackLine(
-  input: TranslateInput,
-  fastPayload: TranslationPayload
-): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing");
-  }
-
-  const content = await requestOpenAIContent({
-    apiKey,
-    systemPrompt: WORD_PHONETIC_FALLBACK_SYSTEM_PROMPT,
-    userPrompt: buildWordPhoneticFallbackUserPrompt(input, fastPayload),
-    maxTokens: 48,
-    logLabel: "openai:word:phonetic"
-  });
-
-  return content.trim();
 }
 
 export function normalizeTextPayloadFromStreamContent(content: string, input: TranslateTextInput): TextTranslationPayload {

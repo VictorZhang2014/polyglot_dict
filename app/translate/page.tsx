@@ -11,6 +11,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { readSseMessages } from "@/lib/sse";
 
 const TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
+const TRANSLATE_STREAM_URL = process.env.NEXT_PUBLIC_TRANSLATE_STREAM_URL?.trim() ?? "";
 const LANGUAGE_FLAGS: Record<string, string> = {
   de: "🇩🇪",
   en: "🇬🇧",
@@ -113,16 +114,17 @@ function createEmptyTranslateResponse(
 }
 
 function buildTranslateTextRequestUrl(sourceText: string, sourceLanguage: string, targetLanguages: string[]): string {
-  const searchParams = new URLSearchParams({
-    sourceText,
-    sourceLanguage
-  });
+  const url = TRANSLATE_STREAM_URL
+    ? new URL("/translate-text", TRANSLATE_STREAM_URL)
+    : new URL("/api/translate-text", typeof window === "undefined" ? "http://localhost" : window.location.origin);
 
+  url.searchParams.set("sourceText", sourceText);
+  url.searchParams.set("sourceLanguage", sourceLanguage);
   for (const targetLanguage of targetLanguages) {
-    searchParams.append("targetLanguages", targetLanguage);
+    url.searchParams.append("targetLanguages", targetLanguage);
   }
 
-  return `/api/translate-text?${searchParams.toString()}`;
+  return TRANSLATE_STREAM_URL ? url.toString() : `${url.pathname}?${url.searchParams.toString()}`;
 }
 
 export default function TranslatePage() {

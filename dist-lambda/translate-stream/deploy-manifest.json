@@ -1,0 +1,12 @@
+{
+  "runtime": "nodejs20.x",
+  "handler": "index.handler",
+  "architecture": "x86_64",
+  "artifact": "dist-lambda/translate-stream.zip",
+  "entry": "dist-lambda/translate-stream/index.js",
+  "notes": [
+    "Create a Lambda Function URL for this function.",
+    "Set Function URL invoke mode to RESPONSE_STREAM.",
+    "Set CORS_ALLOW_ORIGIN to your Amplify app domain if you want a fixed allowed origin."
+  ]
+}

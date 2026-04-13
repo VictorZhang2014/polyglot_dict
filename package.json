@@ -1,6 +1,6 @@
 {
   "name": "polyglot-dict",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "clean": "rm -rf .next .next-dev",
@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:lambda:translate-stream": "node scripts/build-translate-stream-lambda.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1020.0",
@@ -24,6 +25,7 @@
     "@types/node": "^20.17.57",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "esbuild": "^0.28.0",
     "typescript": "^5.8.3"
   }
 }

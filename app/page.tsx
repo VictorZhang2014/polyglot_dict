@@ -14,6 +14,7 @@ import { useI18n } from "@/lib/use-i18n";
 import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
 import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
+const TRANSLATE_STREAM_URL = process.env.NEXT_PUBLIC_TRANSLATE_STREAM_URL?.trim() ?? "";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
   en: "en-US",
@@ -110,16 +111,17 @@ function resolveHistorySourceWord(payload: TranslationPayload, fallbackWord: str
 }
 
 function buildTranslateRequestUrl(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
-  const searchParams = new URLSearchParams({
-    sourceWord,
-    sourceLanguage
-  });
+  const url = TRANSLATE_STREAM_URL
+    ? new URL(TRANSLATE_STREAM_URL)
+    : new URL("/api/translate", typeof window === "undefined" ? "http://localhost" : window.location.origin);
 
+  url.searchParams.set("sourceWord", sourceWord);
+  url.searchParams.set("sourceLanguage", sourceLanguage);
   for (const targetLanguage of targetLanguages) {
-    searchParams.append("targetLanguages", targetLanguage);
+    url.searchParams.append("targetLanguages", targetLanguage);
   }
 
-  return `/api/translate?${searchParams.toString()}`;
+  return TRANSLATE_STREAM_URL ? url.toString() : `${url.pathname}?${url.searchParams.toString()}`;
 }
 
 function hasAnyDirectTranslation(payload: TranslationPayload, targetLanguages: string[]): boolean {
