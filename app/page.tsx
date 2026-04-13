@@ -7,14 +7,12 @@ import { InfoCircledIcon, MagnifyingGlassIcon, SpeakerLoudIcon } from "@radix-ui
 import { Badge, Box, Callout, Card, Flex, Grid, Heading, Select, Text } from "@radix-ui/themes";
 import { addQueryHistory } from "@/lib/history-storage";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
-import { fetchWithSingleRetryOn500 } from "@/lib/retryable-fetch";
 import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/settings-storage";
 import { buildTranslationCacheKey, getTranslationCacheEntry, setTranslationCacheEntry } from "@/lib/translation-cache-indexeddb";
 import { TranslateApiResponse, TranslationPayload } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
 import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
 import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
-import { readSseMessages } from "@/lib/sse";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
@@ -111,6 +109,19 @@ function resolveHistorySourceWord(payload: TranslationPayload, fallbackWord: str
   return fallbackWord.trim();
 }
 
+function buildTranslateRequestUrl(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
+  const searchParams = new URLSearchParams({
+    sourceWord,
+    sourceLanguage
+  });
+
+  for (const targetLanguage of targetLanguages) {
+    searchParams.append("targetLanguages", targetLanguage);
+  }
+
+  return `/api/translate?${searchParams.toString()}`;
+}
+
 function hasAnyDirectTranslation(payload: TranslationPayload, targetLanguages: string[]): boolean {
   const map = new Map(payload.translations.map((item) => [item.targetLanguage, item.directTranslation.trim()]));
   return targetLanguages.some((code) => Boolean(map.get(code)));
@@ -149,6 +160,8 @@ export default function HomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const lastUrlQueryRef = useRef("");
+  const activeEventSourceRef = useRef<EventSource | null>(null);
+  const activeRequestIdRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [sourceWord, setSourceWord] = useState("");
   const [sourceLanguage, setSourceLanguage] = useState("de");
@@ -227,6 +240,13 @@ export default function HomePage() {
     }
 
     setReady(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      activeEventSourceRef.current?.close();
+      activeEventSourceRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -441,6 +461,11 @@ export default function HomePage() {
   }, [error]);
 
   const runQuery = useCallback(async (word: string, languageCode: string) => {
+    activeEventSourceRef.current?.close();
+    activeEventSourceRef.current = null;
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+
     setError("");
     setResponse(null);
     if (!word) {
@@ -486,42 +511,12 @@ export default function HomePage() {
         }
       }
 
-      const res = await fetchWithSingleRetryOn500("/api/translate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sourceWord: word,
-          sourceLanguage: languageCode,
-          targetLanguages: targets
-        })
-      });
-
-      const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
-      const isJson = contentType.includes("application/json");
-      const fromCache = (res.headers.get("x-polyglot-from-cache") ?? "").toLowerCase() === "true";
-
-      if (!res.ok) {
-        const rawBody = isJson ? "" : await res.text();
-        const data = (isJson ? await res.json() : null) as ({ error?: string } | null);
-        if (data?.error) {
-          throw new Error(data.error);
-        }
-
-        if (rawBody) {
-          const snippet = rawBody.replace(/\s+/g, " ").slice(0, 180);
-          throw new Error(`API ${res.status}: ${snippet}`);
-        }
-
-        throw new Error(t("home.error.queryFailed"));
-      }
-
       let currentPayload = createEmptyWordPayload({
         sourceWord: word,
         sourceLanguage: languageCode,
         targetLanguages: targets
       });
+      let fromCache = false;
 
       const applyProtocolLine = (line: string) => {
         const event = parseWordProtocolLine(line);
@@ -554,55 +549,75 @@ export default function HomePage() {
         }
       };
 
-      if (!res.body) {
-        const rawBody = isJson ? "" : await res.text();
-        if (!rawBody) {
-          throw new Error(`API ${res.status} returned an empty response.`);
-        }
+      await new Promise<void>((resolve, reject) => {
+        let finished = false;
+        const eventSource = new EventSource(buildTranslateRequestUrl(word, languageCode, targets));
+        activeEventSourceRef.current = eventSource;
 
-        const parsed = readSseMessages(rawBody);
-        for (const message of parsed.messages) {
-          processProtocolChunk(message);
-        }
-        if (parsed.remaining.trim()) {
-          const flushed = readSseMessages(`${parsed.remaining}\n\n`);
-          for (const message of flushed.messages) {
-            processProtocolChunk(message);
-          }
-        }
-      } else {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let sseBuffer = "";
-
-        while (true) {
-          const { value: chunk, done } = await reader.read();
-          if (done) {
-            break;
+        const finish = () => {
+          if (finished) {
+            return;
           }
 
-          sseBuffer += decoder.decode(chunk, { stream: true });
-          const parsed = readSseMessages(sseBuffer);
-          sseBuffer = parsed.remaining;
-
-          for (const message of parsed.messages) {
-            processProtocolChunk(message);
+          finished = true;
+          if (activeEventSourceRef.current === eventSource) {
+            activeEventSourceRef.current = null;
           }
-        }
+          eventSource.close();
+        };
 
-        sseBuffer += decoder.decode();
-        const parsed = readSseMessages(sseBuffer);
-        for (const message of parsed.messages) {
-          processProtocolChunk(message);
-        }
-
-        if (parsed.remaining.trim()) {
-          const flushed = readSseMessages(`${parsed.remaining}\n\n`);
-          for (const message of flushed.messages) {
-            processProtocolChunk(message);
+        eventSource.onmessage = (event) => {
+          if (activeRequestIdRef.current !== requestId) {
+            return;
           }
-        }
-      }
+
+          processProtocolChunk(event.data);
+        };
+
+        eventSource.addEventListener("meta", (event) => {
+          if (activeRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          try {
+            const meta = JSON.parse((event as MessageEvent<string>).data) as { fromCache?: boolean };
+            fromCache = Boolean(meta.fromCache);
+            setResponse({
+              fromCache,
+              data: currentPayload
+            });
+          } catch {
+            // Ignore malformed metadata and continue streaming the payload.
+          }
+        });
+
+        eventSource.addEventListener("failure", (event) => {
+          if (activeRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          finish();
+          reject(new Error((event as MessageEvent<string>).data || t("home.error.queryFailed")));
+        });
+
+        eventSource.addEventListener("done", () => {
+          if (activeRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          finish();
+          resolve();
+        });
+
+        eventSource.onerror = () => {
+          if (activeRequestIdRef.current !== requestId || finished) {
+            return;
+          }
+
+          finish();
+          reject(new Error(t("home.error.queryFailed")));
+        };
+      });
 
       if (protocolBuffer.trim()) {
         applyProtocolLine(protocolBuffer);

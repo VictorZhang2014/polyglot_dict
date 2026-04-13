@@ -15,32 +15,18 @@ export const runtime = "nodejs";
 export const dynamic = 'force-dynamic'; // To prevent errors while building
 export const maxDuration = 60;          // Timeout setup for Amplify v2, the maximum is 60s
 
-type TranslateTextRequest = {
-  sourceText?: unknown;
-  sourceLanguage?: unknown;
-  targetLanguages?: unknown;
-};
-
 type ParsedRequest = { sourceText: string; sourceLanguage: string; targetLanguages: string[] };
 
 function normalizeCode(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function parseBody(raw: TranslateTextRequest): ParsedRequest {
-  const sourceText = typeof raw.sourceText === "string" ? raw.sourceText.trim() : "";
-  const sourceLanguage = typeof raw.sourceLanguage === "string" ? normalizeCode(raw.sourceLanguage) : "";
-
-  const targetLanguages = Array.isArray(raw.targetLanguages)
-    ? Array.from(
-        new Set(
-          raw.targetLanguages
-            .filter((item): item is string => typeof item === "string")
-            .map(normalizeCode)
-            .filter(Boolean)
-        )
-      )
-    : [];
+function parseSearchParams(searchParams: URLSearchParams): ParsedRequest {
+  const sourceText = searchParams.get("sourceText")?.trim() ?? "";
+  const sourceLanguage = normalizeCode(searchParams.get("sourceLanguage") ?? "");
+  const targetLanguages = Array.from(
+    new Set(searchParams.getAll("targetLanguages").map(normalizeCode).filter(Boolean))
+  );
 
   if (!sourceText) {
     throw new Error("sourceText is required");
@@ -73,7 +59,7 @@ function makeCacheKey(sourceText: string, sourceLanguage: string, targetLanguage
   return createHash("sha256").update(base).digest("hex");
 }
 
-export async function POST(request: Request) { 
+export async function GET(request: Request) {
   try {
     const rateLimit = await checkIpRateLimit(request);
     if (!rateLimit.allowed) {
@@ -86,8 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const raw = (await request.json()) as TranslateTextRequest;
-    const payload = parseBody(raw);
+    const payload = parseSearchParams(new URL(request.url).searchParams);
     const cacheKey = makeCacheKey(payload.sourceText, payload.sourceLanguage, payload.targetLanguages);
     const cachedData = await getCachedTranslation(cacheKey);
     if (cachedData) {

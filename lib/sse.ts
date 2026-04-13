@@ -5,6 +5,10 @@ export function encodeSseDataMessage(data: string): string {
   return `${lines.map((line) => `data: ${line}`).join("\n")}\n\n`;
 }
 
+export function encodeSseEventMessage(event: string, data: string): string {
+  return `event: ${event}\n${encodeSseDataMessage(data)}`;
+}
+
 function decodeSseDataLine(line: string): string | null {
   if (!line.startsWith("data:")) {
     return null;

@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
 import {
   finalizeWordPayload,
   requestWordPhoneticFallbackLine,
   streamWordDetailTranslationWithOpenAI,
   streamWordFastTranslationWithOpenAI
 } from "@/lib/openai-translate";
-import { resolveApiErrorStatus, toEnglishApiErrorMessage } from "@/lib/api-error-message";
+import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 import type { TranslationPayload } from "@/lib/types";
 import { runInBackground } from "@/lib/background-task";
@@ -17,17 +16,11 @@ import {
   serializeWordTranslationPayload
 } from "@/lib/word-stream-protocol";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
-import { encodeSseDataMessage } from "@/lib/sse";
+import { encodeSseDataMessage, encodeSseEventMessage } from "@/lib/sse";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic'; // To prevent errors while building
 export const maxDuration = 60;          // Timeout setup for Amplify v2, the maximum is 60s
-
-type TranslateRequest = {
-  sourceWord?: unknown;
-  sourceLanguage?: unknown;
-  targetLanguages?: unknown;
-};
 
 type ParsedRequest = {
   sourceWord: string;
@@ -39,20 +32,12 @@ function normalizeCode(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function parseBody(raw: TranslateRequest): ParsedRequest {
-  const sourceWord = typeof raw.sourceWord === "string" ? raw.sourceWord.trim() : "";
-  const sourceLanguage = typeof raw.sourceLanguage === "string" ? normalizeCode(raw.sourceLanguage) : "";
-
-  const targetLanguages = Array.isArray(raw.targetLanguages)
-    ? Array.from(
-        new Set(
-          raw.targetLanguages
-            .filter((item): item is string => typeof item === "string")
-            .map(normalizeCode)
-            .filter(Boolean)
-        )
-      )
-    : [];
+function parseSearchParams(searchParams: URLSearchParams): ParsedRequest {
+  const sourceWord = searchParams.get("sourceWord")?.trim() ?? "";
+  const sourceLanguage = normalizeCode(searchParams.get("sourceLanguage") ?? "");
+  const targetLanguages = Array.from(
+    new Set(searchParams.getAll("targetLanguages").map(normalizeCode).filter(Boolean))
+  );
 
   if (!sourceWord) {
     throw new Error("sourceWord is required");
@@ -132,39 +117,50 @@ function ensureProtocolLineBoundary(
   }
 }
 
-export async function POST(request: Request) {
+function createStreamHeaders(fromCache: boolean): HeadersInit {
+  return {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+    "X-Polyglot-From-Cache": String(fromCache)
+  };
+}
+
+function createImmediateEventStream(events: string, fromCache: boolean): Response {
+  return new Response(events, {
+    headers: createStreamHeaders(fromCache)
+  });
+}
+
+export async function GET(request: Request) {
   try {
     const rateLimit = await checkIpRateLimit(request);
     if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: rateLimit.message },
-        {
-          status: rateLimit.status,
-          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) }
-        }
+      return createImmediateEventStream(
+        `${encodeSseEventMessage("failure", rateLimit.message)}${encodeSseEventMessage("done", "failed")}`,
+        false
       );
     }
 
-    const raw = (await request.json()) as TranslateRequest;
-    const payload = parseBody(raw);
+    const payload = parseSearchParams(new URL(request.url).searchParams);
     const cacheKey = makeCacheKey(payload.sourceWord, payload.sourceLanguage, payload.targetLanguages);
     const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
     if (cachedData && hasSuccessfulTranslation(cachedData)) {
       console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
-      return new Response(encodeSseDataMessage(serializeWordTranslationPayload(cachedData)), {
-        headers: {
-          "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-          "X-Accel-Buffering": "no",
-          "X-Polyglot-From-Cache": "true"
-        }
-      });
+      return createImmediateEventStream(
+        `${encodeSseEventMessage("meta", JSON.stringify({ fromCache: true }))}${encodeSseDataMessage(
+          serializeWordTranslationPayload(cachedData)
+        )}${encodeSseEventMessage("done", "complete")}`,
+        true
+      );
     }
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
+          controller.enqueue(encoder.encode(encodeSseEventMessage("meta", JSON.stringify({ fromCache: false }))));
+
           const fastStream = await streamWordFastTranslationWithOpenAI(payload);
           let fastContent = "";
           for await (const chunk of fastStream) {
@@ -205,6 +201,7 @@ export async function POST(request: Request) {
             }
           }
 
+          controller.enqueue(encoder.encode(encodeSseEventMessage("done", "complete")));
           controller.close();
 
           if (hasSuccessfulTranslation(finalPayload)) {
@@ -221,29 +218,23 @@ export async function POST(request: Request) {
             );
           }
         } catch (streamError) {
-          controller.error(streamError);
+          const message = toEnglishApiErrorMessage(streamError);
+          controller.enqueue(encoder.encode(encodeSseEventMessage("failure", message)));
+          controller.enqueue(encoder.encode(encodeSseEventMessage("done", "failed")));
+          controller.close();
         }
       }
     });
 
     return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-        "X-Polyglot-From-Cache": "false"
-      }
+      headers: createStreamHeaders(false)
     });
   } catch (error) {
     const message = toEnglishApiErrorMessage(error);
-    const status = resolveApiErrorStatus(error);
     console.error("[translate] Request failed:", error);
-
-    return NextResponse.json(
-      {
-        error: message
-      },
-      { status }
+    return createImmediateEventStream(
+      `${encodeSseEventMessage("failure", message)}${encodeSseEventMessage("done", "failed")}`,
+      false
     );
   }
 }

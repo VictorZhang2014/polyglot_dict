@@ -112,6 +112,19 @@ function createEmptyTranslateResponse(
   };
 }
 
+function buildTranslateTextRequestUrl(sourceText: string, sourceLanguage: string, targetLanguages: string[]): string {
+  const searchParams = new URLSearchParams({
+    sourceText,
+    sourceLanguage
+  });
+
+  for (const targetLanguage of targetLanguages) {
+    searchParams.append("targetLanguages", targetLanguage);
+  }
+
+  return `/api/translate-text?${searchParams.toString()}`;
+}
+
 export default function TranslatePage() {
   const { t } = useI18n();
   const [sourceLanguage, setSourceLanguage] = useState("de");
@@ -176,17 +189,9 @@ export default function TranslatePage() {
 
     setLoading(true);
     try {
-      const res = await fetchWithSingleRetryOn500("/api/translate-text", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sourceText: value,
-          sourceLanguage,
-          targetLanguages: visibleTargets
-        })
-      });
+      const res = await fetchWithSingleRetryOn500(
+        buildTranslateTextRequestUrl(value, sourceLanguage, visibleTargets)
+      );
 
       const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
       const isJson = contentType.includes("application/json");
