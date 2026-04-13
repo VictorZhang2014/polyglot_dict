@@ -8,6 +8,7 @@ import { fetchWithSingleRetryOn500 } from "@/lib/retryable-fetch";
 import { DEFAULT_SETTINGS, getAllLanguageOptions, readSettings } from "@/lib/settings-storage";
 import { TranslateTextApiResponse } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
+import { readSseMessages } from "@/lib/sse";
 
 const TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
 const LANGUAGE_FLAGS: Record<string, string> = {
@@ -228,24 +229,6 @@ export default function TranslatePage() {
         });
       };
 
-      if (!res.body) {
-        const rawBody = isJson ? "" : await res.text();
-        if (!rawBody) {
-          throw new Error(`API ${res.status} returned an empty response.`);
-        }
-
-        const segments = rawBody.split(TRANSLATION_STREAM_SEPARATOR);
-        visibleTargets.forEach((targetLanguage, index) => {
-          const segment = segments[index]?.trim() ?? "";
-          if (segment) {
-            applyTranslatedSegment(segment, targetLanguage);
-          }
-        });
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
       let buffer = "";
       let nextTargetIndex = 0;
 
@@ -258,13 +241,8 @@ export default function TranslatePage() {
         applyTranslatedSegment(buffer, targetLanguage);
       };
 
-      while (true) {
-        const { value: chunk, done } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(chunk, { stream: true });
+      const processTranslationChunk = (chunk: string) => {
+        buffer += chunk;
 
         let separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
         while (separatorIndex !== -1) {
@@ -280,20 +258,56 @@ export default function TranslatePage() {
         }
 
         applyCurrentStreamingSegment();
-      }
+      };
 
-      buffer += decoder.decode();
-      let separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
-      while (separatorIndex !== -1) {
-        const segment = buffer.slice(0, separatorIndex);
-        const targetLanguage = visibleTargets[nextTargetIndex];
-        if (targetLanguage) {
-          applyTranslatedSegment(segment, targetLanguage);
-          nextTargetIndex += 1;
+      if (!res.body) {
+        const rawBody = isJson ? "" : await res.text();
+        if (!rawBody) {
+          throw new Error(`API ${res.status} returned an empty response.`);
         }
 
-        buffer = buffer.slice(separatorIndex + TRANSLATION_STREAM_SEPARATOR.length);
-        separatorIndex = buffer.indexOf(TRANSLATION_STREAM_SEPARATOR);
+        const parsed = readSseMessages(rawBody);
+        for (const message of parsed.messages) {
+          processTranslationChunk(message);
+        }
+        if (parsed.remaining.trim()) {
+          const flushed = readSseMessages(`${parsed.remaining}\n\n`);
+          for (const message of flushed.messages) {
+            processTranslationChunk(message);
+          }
+        }
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+
+      while (true) {
+        const { value: chunk, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        sseBuffer += decoder.decode(chunk, { stream: true });
+        const parsed = readSseMessages(sseBuffer);
+        sseBuffer = parsed.remaining;
+
+        for (const message of parsed.messages) {
+          processTranslationChunk(message);
+        }
+      }
+
+      sseBuffer += decoder.decode();
+      const parsed = readSseMessages(sseBuffer);
+      for (const message of parsed.messages) {
+        processTranslationChunk(message);
+      }
+      if (parsed.remaining.trim()) {
+        const flushed = readSseMessages(`${parsed.remaining}\n\n`);
+        for (const message of flushed.messages) {
+          processTranslationChunk(message);
+        }
       }
 
       applyCurrentStreamingSegment();

@@ -9,6 +9,7 @@ import { resolveApiErrorStatus, toEnglishApiErrorMessage } from "@/lib/api-error
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 import { runInBackground } from "@/lib/background-task";
+import { encodeSseDataMessage } from "@/lib/sse";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic'; // To prevent errors while building
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
     const cachedData = await getCachedTranslation(cacheKey);
     if (cachedData) {
       console.log(`[translate:text] DynamoDB cache hit for: ${cacheKey}`);
-      return new Response(serializeTextTranslationPayload(cachedData), {
+      return new Response(encodeSseDataMessage(serializeTextTranslationPayload(cachedData)), {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
           const openAiStream = await streamTextTranslationWithOpenAI(payload);
           for await (const chunk of openAiStream) {
             streamedContent += chunk;
-            controller.enqueue(encoder.encode(chunk));
+            controller.enqueue(encoder.encode(encodeSseDataMessage(chunk)));
           }
 
           const translated = normalizeTextPayloadFromStreamContent(streamedContent, payload);

@@ -14,6 +14,7 @@ import { TranslateApiResponse, TranslationPayload } from "@/lib/types";
 import { useI18n } from "@/lib/use-i18n";
 import { applyWordProtocolEvent, createEmptyWordPayload, parseWordProtocolLine } from "@/lib/word-stream-protocol";
 import { supportsVerbConjugationLanguage } from "@/lib/verb-conjugation";
+import { readSseMessages } from "@/lib/sse";
 const QUERY_PAGE_STATE_KEY = "polyglot_dict_query_page_state_v1";
 const SPEECH_LANG_MAP: Record<string, string> = {
   de: "de-DE",
@@ -538,19 +539,39 @@ export default function HomePage() {
         data: currentPayload
       });
 
+      let protocolBuffer = "";
+      const processProtocolChunk = (chunk: string) => {
+        protocolBuffer += chunk;
+
+        let lineBreakIndex = protocolBuffer.indexOf("\n");
+        while (lineBreakIndex !== -1) {
+          const line = protocolBuffer.slice(0, lineBreakIndex);
+          applyProtocolLine(line);
+          protocolBuffer = protocolBuffer.slice(lineBreakIndex + 1);
+          lineBreakIndex = protocolBuffer.indexOf("\n");
+        }
+      };
+
       if (!res.body) {
         const rawBody = isJson ? "" : await res.text();
         if (!rawBody) {
           throw new Error(`API ${res.status} returned an empty response.`);
         }
 
-        for (const line of rawBody.split(/\r?\n/)) {
-          applyProtocolLine(line);
+        const parsed = readSseMessages(rawBody);
+        for (const message of parsed.messages) {
+          processProtocolChunk(message);
+        }
+        if (parsed.remaining.trim()) {
+          const flushed = readSseMessages(`${parsed.remaining}\n\n`);
+          for (const message of flushed.messages) {
+            processProtocolChunk(message);
+          }
         }
       } else {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let sseBuffer = "";
 
         while (true) {
           const { value: chunk, done } = await reader.read();
@@ -558,21 +579,31 @@ export default function HomePage() {
             break;
           }
 
-          buffer += decoder.decode(chunk, { stream: true });
+          sseBuffer += decoder.decode(chunk, { stream: true });
+          const parsed = readSseMessages(sseBuffer);
+          sseBuffer = parsed.remaining;
 
-          let lineBreakIndex = buffer.indexOf("\n");
-          while (lineBreakIndex !== -1) {
-            const line = buffer.slice(0, lineBreakIndex);
-            applyProtocolLine(line);
-            buffer = buffer.slice(lineBreakIndex + 1);
-            lineBreakIndex = buffer.indexOf("\n");
+          for (const message of parsed.messages) {
+            processProtocolChunk(message);
           }
         }
 
-        buffer += decoder.decode();
-        if (buffer.trim()) {
-          applyProtocolLine(buffer);
+        sseBuffer += decoder.decode();
+        const parsed = readSseMessages(sseBuffer);
+        for (const message of parsed.messages) {
+          processProtocolChunk(message);
         }
+
+        if (parsed.remaining.trim()) {
+          const flushed = readSseMessages(`${parsed.remaining}\n\n`);
+          for (const message of flushed.messages) {
+            processProtocolChunk(message);
+          }
+        }
+      }
+
+      if (protocolBuffer.trim()) {
+        applyProtocolLine(protocolBuffer);
       }
 
       const normalizedPayload = normalizeStreamingPayload(currentPayload, targets);

@@ -17,6 +17,7 @@ import {
   serializeWordTranslationPayload
 } from "@/lib/word-stream-protocol";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
+import { encodeSseDataMessage } from "@/lib/sse";
 
 export const runtime = "nodejs";
 export const dynamic = 'force-dynamic'; // To prevent errors while building
@@ -127,7 +128,7 @@ function ensureProtocolLineBoundary(
   content: string
 ): void {
   if (content && !content.endsWith("\n")) {
-    controller.enqueue(encoder.encode("\n"));
+    controller.enqueue(encoder.encode(encodeSseDataMessage("\n")));
   }
 }
 
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
     const cachedData = (await getCachedTranslation(cacheKey)) as TranslationPayload | null;
     if (cachedData && hasSuccessfulTranslation(cachedData)) {
       console.log(`[translate] DynamoDB cache hit for: ${cacheKey}`);
-      return new Response(serializeWordTranslationPayload(cachedData), {
+      return new Response(encodeSseDataMessage(serializeWordTranslationPayload(cachedData)), {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
           let fastContent = "";
           for await (const chunk of fastStream) {
             fastContent += chunk;
-            controller.enqueue(encoder.encode(chunk));
+            controller.enqueue(encoder.encode(encodeSseDataMessage(chunk)));
           }
           ensureProtocolLineBoundary(controller, encoder, fastContent);
 
@@ -177,7 +178,7 @@ export async function POST(request: Request) {
           let detailContent = "";
           for await (const chunk of detailStream) {
             detailContent += chunk;
-            controller.enqueue(encoder.encode(chunk));
+            controller.enqueue(encoder.encode(encodeSseDataMessage(chunk)));
           }
           ensureProtocolLineBoundary(controller, encoder, detailContent);
 
@@ -192,7 +193,7 @@ export async function POST(request: Request) {
               await requestWordPhoneticFallbackLine(payload, fastPayload)
             );
             if (phoneticFallbackContent) {
-              controller.enqueue(encoder.encode(`${phoneticFallbackContent}\n`));
+              controller.enqueue(encoder.encode(encodeSseDataMessage(`${phoneticFallbackContent}\n`)));
 
               const phoneticPayload = phoneticFallbackContent
                 .split(/\r?\n/)
