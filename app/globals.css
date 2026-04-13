@@ -209,6 +209,43 @@ a {
   z-index: 20;
 }
 
+.home-page {
+  min-height: calc(100vh - 180px);
+}
+
+.home-page-idle {
+  justify-content: center;
+  align-items: center;
+}
+
+.query-topbar-idle {
+  position: static;
+  width: min(100%, 620px);
+}
+
+.home-empty-hero {
+  width: min(100%, 620px);
+  text-align: center;
+}
+
+.home-empty-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.12);
+}
+
+.home-empty-title {
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.home-empty-hint {
+  max-width: 34ch;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
 .query-omni {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

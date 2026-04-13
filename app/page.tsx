@@ -246,6 +246,8 @@ export default function HomePage() {
 
   const languageOptions = useMemo(() => getAllLanguageOptions(customLanguages), [customLanguages]);
   const hasResponse = Boolean(response);
+  const requestedQueryWord = (searchParams.get("q") ?? searchParams.get("word") ?? "").trim();
+  const showQueryResultsUi = loading || hasResponse || Boolean(error) || Boolean(requestedQueryWord);
 
   const resolveVisibleTargets = useCallback((languageCode: string) => {
     const normalized = Array.from(new Set(targetLanguages.map((code) => code.trim().toLowerCase()).filter(Boolean)));
@@ -682,8 +684,20 @@ export default function HomePage() {
   }, [ready, searchParams, languageOptions, sourceLanguage, runQuery]);
 
   return (
-    <Flex direction="column" gap="4">
-      <Card size="2" className="query-topbar">
+    <Flex direction="column" gap="4" className={showQueryResultsUi ? "home-page" : "home-page home-page-idle"}>
+      {!showQueryResultsUi ? (
+        <Flex direction="column" gap="3" align="center" className="home-empty-hero">
+          <img src="/icons/icon.png" alt={t("home.empty.logoAlt")} className="home-empty-logo" width="76" height="76" />
+          <Heading size="6" className="home-empty-title">
+            {t("home.empty.title")}
+          </Heading>
+          <Text size="2" color="gray" className="home-empty-hint">
+            {t("home.empty.hint")}
+          </Text>
+        </Flex>
+      ) : null}
+
+      <Card size="2" className={showQueryResultsUi ? "query-topbar" : "query-topbar query-topbar-idle"}>
         <form onSubmit={handleSubmit}>
           <div className="query-omni">
             <Select.Root value={sourceLanguage} onValueChange={handleSourceLanguageChange}>
@@ -720,147 +734,151 @@ export default function HomePage() {
         </form>
       </Card>
 
-      <Text color="gray" size="2">
-        {t("home.targetSummary", {
-          languages: visibleTargets.map((code) => getLanguageName(code, languageOptions)).join(" / ")
-        })}
-      </Text>
+      {showQueryResultsUi ? (
+        <>
+          <Text color="gray" size="2">
+            {t("home.targetSummary", {
+              languages: visibleTargets.map((code) => getLanguageName(code, languageOptions)).join(" / ")
+            })}
+          </Text>
 
-      {error ? (
-        <Callout.Root color={isTimeoutError ? "blue" : "gray"} variant="soft">
-          <Callout.Icon>
-            <InfoCircledIcon />
-          </Callout.Icon>
-          <Callout.Text>{error}</Callout.Text>
-        </Callout.Root>
-      ) : null}
+          {error ? (
+            <Callout.Root color={isTimeoutError ? "blue" : "gray"} variant="soft">
+              <Callout.Icon>
+                <InfoCircledIcon />
+              </Callout.Icon>
+              <Callout.Text>{error}</Callout.Text>
+            </Callout.Root>
+          ) : null}
 
-      <Flex direction="column" gap="4">
-        <Flex align="center" justify="between" gap="3">
-          <Heading size="5">{t("home.result")}</Heading>
-          <Badge size="2" color="gray" variant="soft">
-            {hasResponse ? (response?.fromCache ? t("badge.fromCache") : t("badge.live")) : t("badge.waitingQuery")}
-          </Badge>
-        </Flex>
-
-        <Card>
-          <Flex direction="column" gap="3">
-            <Flex align="center" gap="2" wrap="wrap">
-              <Text className="word-label">{t("home.queryWord")}</Text>
-              {displaySourceWord
-                ? renderSpeakableWord(displaySourceWord, sourceLanguage, "gray", "lg", `source:${displaySourceWord}`)
-                : (
-                  <Badge variant="soft" color="gray">
-                    {t("home.pendingInput")}
-                  </Badge>
-                )}
-              <Text className="word-phonetic-inline">{sourcePhonetic ? `/${sourcePhonetic}/` : t("home.phoneticPending")}</Text>
+          <Flex direction="column" gap="4">
+            <Flex align="center" justify="between" gap="3">
+              <Heading size="5">{t("home.result")}</Heading>
+              <Badge size="2" color="gray" variant="soft">
+                {hasResponse ? (response?.fromCache ? t("badge.fromCache") : t("badge.live")) : t("badge.waitingQuery")}
+              </Badge>
             </Flex>
-            {sourceMetaLine ? <Text className="query-analysis-hint">{sourceMetaLine}</Text> : null}
-            {displaySourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: displaySourceMorphology })}</Text> : null}
-            {showVerbConjugationLink ? (
-              <Text className="query-analysis-hint">
-                <Link
-                  className="query-conjugation-link"
-                  href={`/conjugation?q=${encodeURIComponent(conjugationSourceWord)}&code=${encodeURIComponent(sourceLanguage)}`}
-                >
-                  {t("home.showConjugation")}
-                </Link>
-              </Text>
-            ) : null}
-            {suggestedSourceWords.length > 0 ? (
-              <Box>
-                <Text className="word-label" mb="2">
-                  {t("home.suggestions")}
-                </Text>
-                <div className="word-block">
-                  {suggestedSourceWords.map((word, index) =>
-                    renderSpeakableWord(
-                      word,
-                      sourceLanguage,
-                      "similar",
-                      "md",
-                      `suggested:${index}:${word}`,
-                      {
-                        queryHref: `/?q=${encodeURIComponent(word)}&code=${encodeURIComponent(sourceLanguage)}`
-                      }
-                    )
-                  )}
-                </div>
-              </Box>
-            ) : null}
 
-          </Flex>
-        </Card>
-
-        <Grid columns={{ initial: "1", md: "2" }} gap="4">
-          {filledTranslations.map((item) => {
-            const rawLanguageName = getLanguageName(item.targetLanguage, languageOptions);
-            const cardTitle = `${getLanguageFlag(item.targetLanguage)} ${getSelfLanguageLabel(item.targetLanguage, rawLanguageName)}`;
-            const similarWords = item.similarWords.filter(
-              (word) => normalizeWord(word) !== normalizeWord(item.directTranslation)
-            ).slice(0, 3);
-
-            return (
-              <Card key={item.targetLanguage}>
-                <Flex direction="column" gap="3">
-                  <Heading size="4">{cardTitle}</Heading>
-                  <Box>
-                    <Text className="word-label" mb="2">
-                      {t("home.direct")}
-                    </Text>
-                    {item.directTranslation ? (
-                      <div className="word-block">
-                        {renderSpeakableWord(
-                          item.directTranslation,
-                          item.targetLanguage,
-                          "direct",
-                          "lg",
-                          `direct:${item.targetLanguage}:${item.directTranslation}`,
-                          {
-                            queryHref: `/?q=${encodeURIComponent(item.directTranslation)}&code=${encodeURIComponent(item.targetLanguage)}`
-                          }
-                        )}
-                      </div>
-                    ) : (
+            <Card>
+              <Flex direction="column" gap="3">
+                <Flex align="center" gap="2" wrap="wrap">
+                  <Text className="word-label">{t("home.queryWord")}</Text>
+                  {displaySourceWord
+                    ? renderSpeakableWord(displaySourceWord, sourceLanguage, "gray", "lg", `source:${displaySourceWord}`)
+                    : (
                       <Badge variant="soft" color="gray">
-                        {t("home.pendingQuery")}
+                        {t("home.pendingInput")}
                       </Badge>
                     )}
-                  </Box>
-
+                  <Text className="word-phonetic-inline">{sourcePhonetic ? `/${sourcePhonetic}/` : t("home.phoneticPending")}</Text>
+                </Flex>
+                {sourceMetaLine ? <Text className="query-analysis-hint">{sourceMetaLine}</Text> : null}
+                {displaySourceMorphology ? <Text className="query-analysis-hint">{t("home.morphology", { value: displaySourceMorphology })}</Text> : null}
+                {showVerbConjugationLink ? (
+                  <Text className="query-analysis-hint">
+                    <Link
+                      className="query-conjugation-link"
+                      href={`/conjugation?q=${encodeURIComponent(conjugationSourceWord)}&code=${encodeURIComponent(sourceLanguage)}`}
+                    >
+                      {t("home.showConjugation")}
+                    </Link>
+                  </Text>
+                ) : null}
+                {suggestedSourceWords.length > 0 ? (
                   <Box>
                     <Text className="word-label" mb="2">
-                      {t("home.similar")}
+                      {t("home.suggestions")}
                     </Text>
                     <div className="word-block">
-                      {similarWords.length > 0 ? (
-                        similarWords.map((word, index) =>
-                          renderSpeakableWord(
-                            word,
-                            item.targetLanguage,
-                            "similar",
-                            "md",
-                            `similar:${item.targetLanguage}:${index}:${word}`,
-                            {
-                              queryHref: `/?q=${encodeURIComponent(word)}&code=${encodeURIComponent(item.targetLanguage)}`
-                            }
-                          )
+                      {suggestedSourceWords.map((word, index) =>
+                        renderSpeakableWord(
+                          word,
+                          sourceLanguage,
+                          "similar",
+                          "md",
+                          `suggested:${index}:${word}`,
+                          {
+                            queryHref: `/?q=${encodeURIComponent(word)}&code=${encodeURIComponent(sourceLanguage)}`
+                          }
                         )
-                      ) : (
-                        <Badge variant="soft" color="gray">
-                          {t("home.pendingQuery")}
-                        </Badge>
                       )}
                     </div>
                   </Box>
+                ) : null}
 
-                </Flex>
-              </Card>
-            );
-          })}
-        </Grid>
-      </Flex>
+              </Flex>
+            </Card>
+
+            <Grid columns={{ initial: "1", md: "2" }} gap="4">
+              {filledTranslations.map((item) => {
+                const rawLanguageName = getLanguageName(item.targetLanguage, languageOptions);
+                const cardTitle = `${getLanguageFlag(item.targetLanguage)} ${getSelfLanguageLabel(item.targetLanguage, rawLanguageName)}`;
+                const similarWords = item.similarWords.filter(
+                  (word) => normalizeWord(word) !== normalizeWord(item.directTranslation)
+                ).slice(0, 3);
+
+                return (
+                  <Card key={item.targetLanguage}>
+                    <Flex direction="column" gap="3">
+                      <Heading size="4">{cardTitle}</Heading>
+                      <Box>
+                        <Text className="word-label" mb="2">
+                          {t("home.direct")}
+                        </Text>
+                        {item.directTranslation ? (
+                          <div className="word-block">
+                            {renderSpeakableWord(
+                              item.directTranslation,
+                              item.targetLanguage,
+                              "direct",
+                              "lg",
+                              `direct:${item.targetLanguage}:${item.directTranslation}`,
+                              {
+                                queryHref: `/?q=${encodeURIComponent(item.directTranslation)}&code=${encodeURIComponent(item.targetLanguage)}`
+                              }
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="soft" color="gray">
+                            {t("home.pendingQuery")}
+                          </Badge>
+                        )}
+                      </Box>
+
+                      <Box>
+                        <Text className="word-label" mb="2">
+                          {t("home.similar")}
+                        </Text>
+                        <div className="word-block">
+                          {similarWords.length > 0 ? (
+                            similarWords.map((word, index) =>
+                              renderSpeakableWord(
+                                word,
+                                item.targetLanguage,
+                                "similar",
+                                "md",
+                                `similar:${item.targetLanguage}:${index}:${word}`,
+                                {
+                                  queryHref: `/?q=${encodeURIComponent(word)}&code=${encodeURIComponent(item.targetLanguage)}`
+                                }
+                              )
+                            )
+                          ) : (
+                            <Badge variant="soft" color="gray">
+                              {t("home.pendingQuery")}
+                            </Badge>
+                          )}
+                        </div>
+                      </Box>
+
+                    </Flex>
+                  </Card>
+                );
+              })}
+            </Grid>
+          </Flex>
+        </>
+      ) : null}
     </Flex>
   );
 }

@@ -37,6 +37,9 @@ const EN_MESSAGES = {
   "home.meta.gender": "Gender: {gender}",
   "home.meta.genderUnknown": "Gender: unknown",
   "home.showConjugation": "Show all verb conjugations",
+  "home.empty.title": "ParlerAI Dictionary",
+  "home.empty.hint": "Tailored for polyglot or trilingual learners",
+  "home.empty.logoAlt": "ParlerAI app logo",
 
   "conjugation.title": "Verb Conjugation",
   "conjugation.desc": "View full French and German verb conjugation tables generated from standard rules and CSV-backed irregular data.",
@@ -222,6 +225,9 @@ const ZH_MESSAGES: MessageMap = {
   "home.meta.gender": "性别：{gender}",
   "home.meta.genderUnknown": "性别：未知",
   "home.showConjugation": "显示所有的动词变位",
+  "home.empty.title": "ParlerAI 词典",
+  "home.empty.hint": "专为多语或三语学习者定制",
+  "home.empty.logoAlt": "ParlerAI 应用图标",
 
   "conjugation.title": "动词变位",
   "conjugation.desc": "按标准规则与 CSV 不规则数据生成并展示法语、德语动词完整变位表。",
@@ -400,6 +406,9 @@ const DE_MESSAGES: MessageMap = {
   "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Genus: {gender}",
   "home.meta.genderUnknown": "Genus: unbekannt",
+  "home.empty.title": "ParlerAI Wörterbuch",
+  "home.empty.hint": "Speziell für polyglotte oder trilinguale Lernende",
+  "home.empty.logoAlt": "ParlerAI App-Logo",
 
   "translate.title": "Übersetzen",
   "translate.error.enterText": "Bitte gib einen kurzen Satz ein.",
@@ -500,6 +509,9 @@ const FR_MESSAGES: MessageMap = {
   "home.meta.plural": "Pluriel : {plural}",
   "home.meta.gender": "Genre : {gender}",
   "home.meta.genderUnknown": "Genre : inconnu",
+  "home.empty.title": "Dictionnaire ParlerAI",
+  "home.empty.hint": "Conçu pour les apprenants polyglottes ou trilingues",
+  "home.empty.logoAlt": "Logo de l’application ParlerAI",
 
   "translate.title": "Traduire",
   "translate.error.enterText": "Veuillez saisir une phrase courte.",
@@ -600,6 +612,9 @@ const ES_MESSAGES: MessageMap = {
   "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Género: {gender}",
   "home.meta.genderUnknown": "Género: desconocido",
+  "home.empty.title": "Diccionario ParlerAI",
+  "home.empty.hint": "Diseñado para estudiantes políglotas o trilingües",
+  "home.empty.logoAlt": "Logotipo de la app ParlerAI",
 
   "translate.title": "Traducir",
   "translate.error.enterText": "Introduce una frase corta para traducir.",
@@ -700,6 +715,9 @@ const IT_MESSAGES: MessageMap = {
   "home.meta.plural": "Plurale: {plural}",
   "home.meta.gender": "Genere: {gender}",
   "home.meta.genderUnknown": "Genere: sconosciuto",
+  "home.empty.title": "Dizionario ParlerAI",
+  "home.empty.hint": "Pensato per studenti poliglotti o trilingui",
+  "home.empty.logoAlt": "Logo dell'app ParlerAI",
 
   "translate.title": "Traduci",
   "translate.error.enterText": "Inserisci una frase breve da tradurre.",
@@ -800,6 +818,9 @@ const PT_MESSAGES: MessageMap = {
   "home.meta.plural": "Plural: {plural}",
   "home.meta.gender": "Gênero: {gender}",
   "home.meta.genderUnknown": "Gênero: desconhecido",
+  "home.empty.title": "Dicionário ParlerAI",
+  "home.empty.hint": "Feito para estudantes poliglotas ou trilíngues",
+  "home.empty.logoAlt": "Logotipo do app ParlerAI",
 
   "translate.title": "Traduzir",
   "translate.error.enterText": "Digite uma frase curta para traduzir.",
@@ -900,6 +921,9 @@ const JA_MESSAGES: MessageMap = {
   "home.meta.plural": "複数形: {plural}",
   "home.meta.gender": "性: {gender}",
   "home.meta.genderUnknown": "性: 不明",
+  "home.empty.title": "ParlerAI 辞典",
+  "home.empty.hint": "多言語学習者やトリリンガル学習者向けに設計",
+  "home.empty.logoAlt": "ParlerAI アプリのロゴ",
 
   "translate.title": "翻訳",
   "translate.error.enterText": "翻訳する短い文を入力してください。",
@@ -1000,6 +1024,9 @@ const KO_MESSAGES: MessageMap = {
   "home.meta.plural": "복수형: {plural}",
   "home.meta.gender": "성: {gender}",
   "home.meta.genderUnknown": "성: 알 수 없음",
+  "home.empty.title": "ParlerAI 사전",
+  "home.empty.hint": "다중 언어 학습자와 3개 국어 학습자에게 맞춤 제작",
+  "home.empty.logoAlt": "ParlerAI 앱 로고",
 
   "translate.title": "번역",
   "translate.error.enterText": "번역할 짧은 문장을 입력하세요.",
@@ -1100,6 +1127,9 @@ const RU_MESSAGES: MessageMap = {
   "home.meta.plural": "Множественное число: {plural}",
   "home.meta.gender": "Род: {gender}",
   "home.meta.genderUnknown": "Род: неизвестен",
+  "home.empty.title": "Словарь ParlerAI",
+  "home.empty.hint": "Создано для полиглотов и тех, кто изучает три языка",
+  "home.empty.logoAlt": "Логотип приложения ParlerAI",
 
   "translate.title": "Перевод",
   "translate.error.enterText": "Введите короткую фразу для перевода.",
@@ -1200,6 +1230,9 @@ const AR_MESSAGES: MessageMap = {
   "home.meta.plural": "صيغة الجمع: {plural}",
   "home.meta.gender": "الجنس: {gender}",
   "home.meta.genderUnknown": "الجنس: غير معروف",
+  "home.empty.title": "قاموس ParlerAI",
+  "home.empty.hint": "مصمم خصيصًا لمتعلمي اللغات المتعددة أو ثلاثيي اللغة",
+  "home.empty.logoAlt": "شعار تطبيق ParlerAI",
 
   "translate.title": "ترجمة",
   "translate.error.enterText": "يرجى إدخال جملة قصيرة للترجمة.",
