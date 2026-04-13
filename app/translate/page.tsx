@@ -469,7 +469,7 @@ export default function TranslatePage() {
                 <Select.Trigger />
                 <Select.Content position="popper">
                   {BUILTIN_LANGUAGES.map((item) => (
-                    <Select.Item key={item.code} value={item.code}>
+                    <Select.Item key={item.code} value={item.code} className="translation-language-switcher-item">
                       {getLanguageFlag(item.code)} {item.name}
                     </Select.Item>
                   ))}

@@ -767,6 +767,18 @@ a {
   color: var(--app-translation-placeholder) !important;
 }
 
+.translation-language-switcher-item {
+  min-height: 48px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.translation-language-switcher-item:hover,
+.translation-language-switcher-item[data-highlighted] {
+  background: #f3f4f6;
+  color: #111111;
+}
+
 .translation-target-area :where(.rt-TextAreaInput),
 textarea.translation-target-area {
   color: var(--app-translation-text) !important;
@@ -775,6 +787,12 @@ textarea.translation-target-area {
 }
 
 @media (max-width: 768px) {
+  .translation-language-switcher-item {
+    min-height: 52px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
   .translation-source-area,
   .translation-target-area,
   .translation-source-area :where(.rt-TextAreaInput),
