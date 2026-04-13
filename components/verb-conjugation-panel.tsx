@@ -17,6 +17,12 @@ export function VerbConjugationPanel({
   tenseLabelKeys
 }: VerbConjugationPanelProps) {
   const { t } = useI18n();
+  const getHeaderClassName = (moodId: string) => {
+    const headerTone =
+      moodId === "indicative" ? "indicative" : moodId === "subjunctive" ? "subjunctive" : "other";
+
+    return `conjugation-card-header conjugation-card-header-${result.language} conjugation-card-header-${result.language}-${headerTone}`;
+  };
   const tenseBlocks = result.sections.flatMap((section) =>
     section.tables.map((table) => ({
       moodId: section.id,
@@ -30,7 +36,7 @@ export function VerbConjugationPanel({
         {tenseBlocks.map(({ moodId, table }) => (
           <Card size="4" key={`${moodId}:${table.id}`} className="conjugation-tense-card">
             <Flex direction="column" gap="3">
-              <div>
+              <div className={getHeaderClassName(moodId)}>
                 <Text as="p" size="1" className="conjugation-mood-label">
                   {t(moodLabelKeys[moodId])}
                 </Text>

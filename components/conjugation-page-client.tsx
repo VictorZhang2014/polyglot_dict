@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeftIcon, EnvelopeClosedIcon, InfoCircledIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Callout, Flex, Heading, IconButton } from "@radix-ui/themes";
+import { Badge, Box, Callout, Flex, IconButton } from "@radix-ui/themes";
 import { VerbConjugationPanel } from "@/components/verb-conjugation-panel";
 import type { VerbConjugationApiResponse } from "@/lib/lang-conjugation/types";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
@@ -14,7 +14,7 @@ import {
   supportsVerbConjugationLanguage
 } from "@/lib/verb-conjugation";
 
-const SELF_LANGUAGE_LABELS: Record<string, string> = {
+const CONJUGATION_LANGUAGE_LABELS: Record<string, string> = {
   de: "Deutsch",
   en: "English",
   fr: "Français",
@@ -27,6 +27,7 @@ const SELF_LANGUAGE_LABELS: Record<string, string> = {
   ru: "Русский",
   ar: "العربية"
 };
+
 const CONTACT_EMAIL = "contact@parlerai.app";
 
 type ConjugationPageClientProps = {
@@ -41,8 +42,8 @@ export function ConjugationPageClient({
   const { t } = useI18n();
   const isSupported = supportsVerbConjugationLanguage(sourceLanguage);
   const languageName = sourceLanguage ? getLanguageName(sourceLanguage, BUILTIN_LANGUAGES) : "";
-  const selfLanguageName = sourceLanguage
-    ? SELF_LANGUAGE_LABELS[sourceLanguage] ?? languageName.replace(/\s*\(.+\)\s*$/, "")
+  const queryLanguageLabel = sourceLanguage
+    ? CONJUGATION_LANGUAGE_LABELS[sourceLanguage] ?? languageName.replace(/\s*\(.+\)\s*$/, "")
     : "";
   const normalizedWord = useMemo(() => sourceWord.trim(), [sourceWord]);
   const [loading, setLoading] = useState(false);
@@ -99,19 +100,21 @@ export function ConjugationPageClient({
     <Flex direction="column" gap="4">
       <Box className="conjugation-page-header">
         <div className="conjugation-page-header-top">
-          <IconButton asChild variant="soft" color="gray" radius="full" size="3" className="conjugation-float-button">
-            <Link href="/" aria-label="Back to home">
-              <ChevronLeftIcon />
-            </Link>
-          </IconButton>
-          <div className="conjugation-page-title-wrap">
-            <Heading size="5" align="center" className="conjugation-page-title">
-              动词变位{selfLanguageName ? ` · ${selfLanguageName}` : ""}
-            </Heading>
+          <div className="conjugation-page-header-left">
+            <IconButton asChild variant="ghost" color="gray" radius="none" size="3" className="conjugation-back-button">
+              <Link href="/" aria-label="Back to home">
+                <ChevronLeftIcon className="conjugation-back-icon" />
+              </Link>
+            </IconButton>
             {normalizedWord ? (
-              <Badge variant="soft" className="conjugation-query-word-badge">
-                {normalizedWord}
-              </Badge>
+              <div className="conjugation-query-badge-wrap">
+                <Badge variant="soft" className="conjugation-query-word-badge">
+                  {normalizedWord}
+                </Badge>
+                {queryLanguageLabel ? (
+                  <span className="conjugation-query-language-tag">{queryLanguageLabel}</span>
+                ) : null}
+              </div>
             ) : null}
           </div>
           <IconButton

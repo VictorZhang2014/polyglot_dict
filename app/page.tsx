@@ -662,9 +662,9 @@ export default function HomePage() {
                   <span>{sourceLanguage.toUpperCase()}</span>
                 </span>
               </Select.Trigger>
-              <Select.Content position="popper">
+              <Select.Content position="popper" className="query-omni-lang-menu">
                 {BUILTIN_LANGUAGES.map((item) => (
-                  <Select.Item key={item.code} value={item.code}>
+                  <Select.Item key={item.code} value={item.code} className="query-omni-lang-item">
                     {getLanguageFlag(item.code)} {item.name}
                   </Select.Item>
                 ))}

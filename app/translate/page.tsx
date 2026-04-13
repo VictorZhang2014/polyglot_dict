@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { DiscIcon, InfoCircledIcon, SpeakerLoudIcon, StopIcon } from "@radix-ui/react-icons";
+import { InfoCircledIcon, SpeakerLoudIcon, StopIcon } from "@radix-ui/react-icons";
 import { Badge, Button, Callout, Card, Flex, Grid, Heading, Select, Text, TextArea } from "@radix-ui/themes";
 import { BUILTIN_LANGUAGES, getLanguageName } from "@/lib/languages";
 import { fetchWithSingleRetryOn500 } from "@/lib/retryable-fetch";
@@ -36,6 +36,28 @@ const SPEECH_LANG_MAP: Record<string, string> = {
   ru: "ru-RU",
   ar: "ar-SA"
 };
+
+function MicrophoneIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12 15.5C9.79086 15.5 8 13.7091 8 11.5V7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7V11.5C16 13.7091 14.2091 15.5 12 15.5Z"
+        fill="currentColor"
+      />
+      <path
+        d="M6 10.5C6.55228 10.5 7 10.9477 7 11.5C7 14.2614 9.23858 16.5 12 16.5C14.7614 16.5 17 14.2614 17 11.5C17 10.9477 17.4477 10.5 18 10.5C18.5523 10.5 19 10.9477 19 11.5C19 14.8783 16.3581 17.6397 13 17.97V20H15C15.5523 20 16 20.4477 16 21C16 21.5523 15.5523 22 15 22H9C8.44772 22 8 21.5523 8 21C8 20.4477 8.44772 20 9 20H11V17.97C7.64191 17.6397 5 14.8783 5 11.5C5 10.9477 5.44772 10.5 6 10.5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 function getLanguageFlag(code: string): string {
   return LANGUAGE_FLAGS[code] ?? "🌐";
@@ -470,16 +492,37 @@ export default function TranslatePage() {
                   type="button"
                   variant="soft"
                   color={recordingState === "recording" ? "red" : "gray"}
-                  className="translation-audio-btn"
+                  className={`translation-audio-btn translation-record-btn${
+                    recordingState === "recording"
+                      ? " is-recording"
+                      : recordingState === "transcribing"
+                        ? " is-transcribing"
+                        : ""
+                  }`}
                   onClick={() => void handleRecordToggle()}
                   disabled={loading || recordingState === "transcribing"}
+                  aria-label={
+                    recordingState === "recording"
+                      ? t("translate.recordStop")
+                      : recordingState === "transcribing"
+                        ? t("translate.transcribing")
+                        : t("translate.recordStart")
+                  }
+                  title={
+                    recordingState === "recording"
+                      ? t("translate.recordStop")
+                      : recordingState === "transcribing"
+                        ? t("translate.transcribing")
+                        : t("translate.recordStart")
+                  }
                 >
-                  {recordingState === "recording" ? <StopIcon /> : <DiscIcon />}
-                  {recordingState === "recording"
-                    ? t("translate.recordStop")
-                    : recordingState === "transcribing"
-                      ? t("translate.transcribing")
-                      : t("translate.recordStart")}
+                  {recordingState === "transcribing" ? (
+                    <span className="query-btn-spinner" aria-hidden="true" />
+                  ) : recordingState === "recording" ? (
+                    <StopIcon />
+                  ) : (
+                    <MicrophoneIcon />
+                  )}
                 </Button>
               </Flex>
               <Button type="submit" color="gray" className="translation-submit-btn" disabled={loading}>
