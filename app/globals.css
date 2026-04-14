@@ -761,6 +761,10 @@ a {
 
 .translation-target-area {
   color: var(--app-translation-text) !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -webkit-touch-callout: default;
+  cursor: text;
 }
 
 .translation-target-area::placeholder {
@@ -784,6 +788,10 @@ textarea.translation-target-area {
   color: var(--app-translation-text) !important;
   -webkit-text-fill-color: var(--app-translation-text) !important;
   opacity: 1 !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -webkit-touch-callout: default;
+  cursor: text;
 }
 
 @media (max-width: 768px) {
