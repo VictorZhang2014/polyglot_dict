@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
-import { createOpenAIClient } from "@/lib/openai-client";
+import { createOpenAIClient } from "@/lib/llm/llm-client";
 
 export const runtime = "nodejs";
 

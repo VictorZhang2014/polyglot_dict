@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import {
-  normalizeTextPayloadFromStreamContent,
+import { 
   serializeTextTranslationPayload,
-  streamTextTranslationWithOpenAI
-} from "@/lib/openai-translate";
+  normalizeTextPayloadFromStreamContent,
+  streamTextTranslationWithClaudeAI
+} from "@/lib/llm/openai-translate";
 import { resolveApiErrorStatus, toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
@@ -96,8 +96,8 @@ export async function handleTranslateTextRequest(request: Request): Promise<Resp
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          const openAiStream = await streamTextTranslationWithOpenAI(payload);
-          for await (const chunk of openAiStream) {
+          const llmStream = await streamTextTranslationWithClaudeAI(payload);
+          for await (const chunk of llmStream) {
             streamedContent += chunk;
             controller.enqueue(encoder.encode(encodeSseDataMessage(chunk)));
           }

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   finalizeWordPayload,
-  streamWordTranslationWithOpenAI
-} from "@/lib/openai-translate";
+  streamWordTranslationWithClaudeAI
+} from "@/lib/llm/openai-translate";
 import { toEnglishApiErrorMessage } from "@/lib/api-error-message";
 import { getCachedTranslation, cacheTranslation } from "@/lib/dynamodb";
 import type { TranslationPayload } from "@/lib/types";
@@ -137,7 +137,7 @@ export async function handleTranslateWordRequest(request: Request): Promise<Resp
         try {
           controller.enqueue(encoder.encode(encodeSseEventMessage("meta", JSON.stringify({ fromCache: false }))));
 
-          const wordStream = await streamWordTranslationWithOpenAI(payload);
+          const wordStream = await streamWordTranslationWithClaudeAI(payload);
           let streamedContent = "";
           for await (const chunk of wordStream) {
             streamedContent += chunk;
