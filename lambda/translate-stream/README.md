@@ -18,7 +18,7 @@ npm run build:lambda:translate-stream
 
 The build outputs:
 
-- `dist-lambda/translate-stream/index.js`
+- `dist-lambda/translate-stream/index.mjs`
 - `dist-lambda/translate-stream/deploy-manifest.json`
 - `dist-lambda/translate-stream.zip`
 
@@ -38,10 +38,9 @@ Useful environment variables:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `OPENAI_API_BASE_URL`
-- `OPENAI_TIMEOUT_MS`
-- `OPENAI_TOTAL_TIMEOUT_MS`
-- `OPENAI_FOLLOWUP_MIN_BUDGET_MS`
-- `OPENAI_MAX_TOKENS`
+- `OPENAI_AUDIO_API_URL`
+- `CLAUDE_API_KEY`
+- `CLAUDE_MODEL` 
 - `AI_DYNAMODB_TABLE_NAME`
 - `AI_AWS_REGION`
 - `CORS_ALLOW_ORIGIN`
