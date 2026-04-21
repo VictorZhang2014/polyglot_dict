@@ -12,6 +12,7 @@ import { readSseMessages } from "@/lib/sse";
 
 const TRANSLATION_STREAM_SEPARATOR = "$LAFIN&";
 const TRANSLATE_STREAM_URL = process.env.NEXT_PUBLIC_LAMBDA_TRANSLATE_STREAM_URL?.trim() ?? "";
+const MAX_RECORDING_DURATION_MS = 30_000;
 const LANGUAGE_FLAGS: Record<string, string> = {
   de: "🇩🇪",
   en: "🇬🇧",
@@ -140,6 +141,14 @@ export default function TranslatePage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimeoutRef = useRef<number | null>(null);
+
+  const clearRecordingTimeout = () => {
+    if (recordingTimeoutRef.current !== null) {
+      window.clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const settings = readSettings();
@@ -149,6 +158,7 @@ export default function TranslatePage() {
 
   useEffect(() => {
     return () => {
+      clearRecordingTimeout();
       if (mediaRecorderRef.current?.state === "recording") {
         mediaRecorderRef.current.stop();
       }
@@ -403,11 +413,13 @@ export default function TranslatePage() {
       };
 
       recorder.onerror = () => {
+        clearRecordingTimeout();
         setRecordingState("idle");
         setError(t("translate.error.transcribeFailed"));
       };
 
       recorder.onstop = async () => {
+        clearRecordingTimeout();
         const recordedMimeType = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(audioChunksRef.current, { type: recordedMimeType });
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -433,8 +445,14 @@ export default function TranslatePage() {
       setError("");
       setResponse(null);
       recorder.start();
+      recordingTimeoutRef.current = window.setTimeout(() => {
+        if (recorder.state === "recording") {
+          recorder.stop();
+        }
+      }, MAX_RECORDING_DURATION_MS);
       setRecordingState("recording");
     } catch (recordError) {
+      clearRecordingTimeout();
       setError(recordError instanceof Error ? recordError.message : t("translate.error.recordUnavailable"));
       setRecordingState("idle");
     }
