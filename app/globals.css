@@ -61,6 +61,11 @@ a {
   --app-query-lang-hover: rgba(15, 23, 42, 0.06);
   --app-query-lang-active: rgba(15, 23, 42, 0.06);
   --app-query-lang-text-active: #111111;
+  --app-desktop-modal-bg: rgba(255, 255, 255, 0.96);
+  --app-desktop-modal-border: rgba(15, 23, 42, 0.08);
+  --app-desktop-modal-shadow: 0 28px 80px rgba(15, 23, 42, 0.24);
+  --app-desktop-modal-eyebrow: #4b5563;
+  --app-desktop-modal-copy: #111827;
 }
 
 :is(.dark, .dark-theme) .radix-themes:not(.light, .light-theme),
@@ -94,6 +99,11 @@ a {
   --app-query-lang-hover: rgba(255, 255, 255, 0.08);
   --app-query-lang-active: rgba(255, 255, 255, 0.08);
   --app-query-lang-text-active: #f5f5f5;
+  --app-desktop-modal-bg: rgba(28, 28, 31, 0.96);
+  --app-desktop-modal-border: rgba(255, 255, 255, 0.1);
+  --app-desktop-modal-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+  --app-desktop-modal-eyebrow: #d4d4d8;
+  --app-desktop-modal-copy: #f5f5f5;
 }
 
 .radix-app-bg {
@@ -131,6 +141,37 @@ a {
 .gdpr-banner-card {
   max-width: 680px;
   margin: 0 auto;
+}
+
+.desktop-experience-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px calc(96px + env(safe-area-inset-bottom));
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(12px);
+}
+
+.desktop-experience-modal-card {
+  width: min(100%, 420px);
+  border-radius: 24px;
+  background: var(--app-desktop-modal-bg);
+  box-shadow: var(--app-desktop-modal-shadow), inset 0 0 0 1px var(--app-desktop-modal-border);
+}
+
+.desktop-experience-modal-eyebrow {
+  display: inline-flex;
+  color: var(--app-desktop-modal-eyebrow);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.desktop-experience-modal-copy {
+  color: var(--app-desktop-modal-copy);
+  line-height: 1.6;
 }
 
 .gdpr-legal-links a {

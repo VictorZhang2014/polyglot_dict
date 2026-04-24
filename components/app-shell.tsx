@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Box, Container, Theme } from "@radix-ui/themes";
 import { BottomTabbar } from "@/components/bottom-tabbar";
+import { DesktopExperienceModal } from "@/components/desktop-experience-modal";
 import { GdprConsentBanner } from "@/components/gdpr-consent-banner";
 import { useI18n } from "@/lib/use-i18n";
 import { DEFAULT_SETTINGS, readSettings, SETTINGS_CHANGED_EVENT } from "@/lib/settings-storage";
@@ -118,6 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Box>
           </Box>
         </Container>
+        <DesktopExperienceModal />
         <GdprConsentBanner />
         <BottomTabbar />
       </div>

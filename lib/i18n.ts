@@ -156,6 +156,10 @@ const EN_MESSAGES = {
   "settings.userAgreement": "User Agreement",
   "settings.version": "Version",
   "settings.saved": "Settings saved",
+  "desktopPrompt.eyebrow": "Heads up",
+  "desktopPrompt.title": "Best experience on your phone",
+  "desktopPrompt.description": "You're accessing from a PC. The best user experience is in your phone's browser.",
+  "desktopPrompt.continue": "Continue on PC",
   "gdpr.title": "Privacy & cookies",
   "gdpr.description":
     "We use necessary cookies for core app functions and optional analytics cookies for improvement.",
