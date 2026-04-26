@@ -55,7 +55,32 @@ function commonPrefixLength(left: string, right: string): number {
   }
   return index;
 }
- 
+
+const DIRECT_TRANSLATION_MULTI_SPLIT = /\s(?:\/|;)\s/u;
+const DIRECT_TRANSLATION_ANNOTATION_SUFFIX =
+  /\s*\((?:[^()]*(?:participle|past|present|future|plural|singular|masculine|feminine|neuter|formal|informal|literal|figurative|idiomatic|verb|noun|adjective|adverb)[^()]*)\)\s*$/iu;
+
+function uniqueNonEmptyStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeLexicalCandidate(value: string): string {
+  return toText(value).replace(DIRECT_TRANSLATION_ANNOTATION_SUFFIX, "").trim();
+}
+
+function splitDirectTranslationCandidates(value: string): string[] {
+  const normalizedValue = toText(value);
+  if (!normalizedValue) {
+    return [];
+  }
+
+  const rawCandidates = DIRECT_TRANSLATION_MULTI_SPLIT.test(normalizedValue)
+    ? normalizedValue.split(DIRECT_TRANSLATION_MULTI_SPLIT)
+    : [normalizedValue];
+
+  return uniqueNonEmptyStrings(rawCandidates.map(normalizeLexicalCandidate));
+}
+
 
 function normalizePartOfSpeech(value: unknown): string {
   const normalized = toText(value).toLowerCase();
@@ -150,14 +175,20 @@ function sanitizeTranslationsAgainstSource(input: TranslateInput, payload: Trans
   return {
     ...payload,
     translations: payload.translations.map((item) => {
+      const translationCandidates = splitDirectTranslationCandidates(item.directTranslation);
+      const primaryCandidate = translationCandidates[0] ?? normalizeLexicalCandidate(item.directTranslation);
       const directTranslation =
-        payload.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(item.directTranslation, sourceCandidates)
+        payload.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(primaryCandidate, sourceCandidates)
           ? ""
-          : item.directTranslation;
+          : primaryCandidate;
       const directKey = normalizeComparableWord(directTranslation);
-      const similarWords = item.similarWords
+      const similarWords = [...translationCandidates.slice(1), ...item.similarWords.map(normalizeLexicalCandidate)]
         .filter((word) => !isSourceLikeTargetWord(word, sourceCandidates))
         .filter((word) => normalizeComparableWord(word) !== directKey)
+        .filter(
+          (word, index, values) =>
+            values.findIndex((candidate) => normalizeComparableWord(candidate) === normalizeComparableWord(word)) === index
+        )
         .slice(0, WORD_TARGET_SIMILAR_LIMIT);
 
       return {

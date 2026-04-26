@@ -34,6 +34,9 @@ Examples:
 
 ## Translation Rules
 - Return exactly 1 directTranslation per target language (or empty if unknown).
+- directTranslation must be a single primary lexical item, not multiple senses joined by "/" or ";" and not an explanatory gloss list.
+- Never include grammar notes or disambiguation notes in directTranslation, such as "(past participle)" or "(formal)".
+- If the source form is ambiguous or inflected, choose the single most likely dictionary sense in the source language and put any other close alternatives in SIMILAR instead.
 - Return 0–3 similarWords per target language. Omit rather than guess.
 - similarWords must not duplicate the directTranslation.
 - Every directTranslation and similarWord must be a valid lexical item in its target language only.

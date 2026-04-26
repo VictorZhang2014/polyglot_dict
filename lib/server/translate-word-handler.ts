@@ -24,7 +24,7 @@ function normalizeCode(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function parseSearchParams(searchParams: URLSearchParams): ParsedRequest {
+export function parseSearchParams(searchParams: URLSearchParams): ParsedRequest {
   const sourceWord = searchParams.get("sourceWord")?.trim() ?? "";
   const sourceLanguage = normalizeCode(searchParams.get("sourceLanguage") ?? "");
   const targetLanguages = Array.from(
@@ -54,7 +54,7 @@ function parseSearchParams(searchParams: URLSearchParams): ParsedRequest {
   };
 }
 
-function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
+export function makeCacheKey(sourceWord: string, sourceLanguage: string, targetLanguages: string[]): string {
   const base = JSON.stringify({
     v: 19,
     sourceWord: sourceWord.toLowerCase(),
