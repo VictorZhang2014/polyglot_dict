@@ -42647,6 +42647,9 @@ Examples:
 
 ## Translation Rules
 - Return exactly 1 directTranslation per target language (or empty if unknown).
+- directTranslation must be a single primary lexical item, not multiple senses joined by "/" or ";" and not an explanatory gloss list.
+- Never include grammar notes or disambiguation notes in directTranslation, such as "(past participle)" or "(formal)".
+- If the source form is ambiguous or inflected, choose the single most likely dictionary sense in the source language and put any other close alternatives in SIMILAR instead.
 - Return 0\u20133 similarWords per target language. Omit rather than guess.
 - similarWords must not duplicate the directTranslation.
 - Every directTranslation and similarWord must be a valid lexical item in its target language only.
@@ -42715,6 +42718,22 @@ function commonPrefixLength(left, right) {
     index += 1;
   }
   return index;
+}
+var DIRECT_TRANSLATION_MULTI_SPLIT = /\s(?:\/|;)\s/u;
+var DIRECT_TRANSLATION_ANNOTATION_SUFFIX = /\s*\((?:[^()]*(?:participle|past|present|future|plural|singular|masculine|feminine|neuter|formal|informal|literal|figurative|idiomatic|verb|noun|adjective|adverb)[^()]*)\)\s*$/iu;
+function uniqueNonEmptyStrings(values) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+function normalizeLexicalCandidate(value) {
+  return toText(value).replace(DIRECT_TRANSLATION_ANNOTATION_SUFFIX, "").trim();
+}
+function splitDirectTranslationCandidates(value) {
+  const normalizedValue = toText(value);
+  if (!normalizedValue) {
+    return [];
+  }
+  const rawCandidates = DIRECT_TRANSLATION_MULTI_SPLIT.test(normalizedValue) ? normalizedValue.split(DIRECT_TRANSLATION_MULTI_SPLIT) : [normalizedValue];
+  return uniqueNonEmptyStrings(rawCandidates.map(normalizeLexicalCandidate));
 }
 function normalizePartOfSpeech(value) {
   const normalized = toText(value).toLowerCase();
@@ -42788,9 +42807,13 @@ function sanitizeTranslationsAgainstSource(input, payload2) {
   return {
     ...payload2,
     translations: payload2.translations.map((item) => {
-      const directTranslation = payload2.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(item.directTranslation, sourceCandidates) ? "" : item.directTranslation;
+      const translationCandidates = splitDirectTranslationCandidates(item.directTranslation);
+      const primaryCandidate = translationCandidates[0] ?? normalizeLexicalCandidate(item.directTranslation);
+      const directTranslation = payload2.sourcePartOfSpeech === "unknown" && isSourceLikeTargetWord(primaryCandidate, sourceCandidates) ? "" : primaryCandidate;
       const directKey = normalizeComparableWord(directTranslation);
-      const similarWords = item.similarWords.filter((word) => !isSourceLikeTargetWord(word, sourceCandidates)).filter((word) => normalizeComparableWord(word) !== directKey).slice(0, WORD_TARGET_SIMILAR_LIMIT);
+      const similarWords = [...translationCandidates.slice(1), ...item.similarWords.map(normalizeLexicalCandidate)].filter((word) => !isSourceLikeTargetWord(word, sourceCandidates)).filter((word) => normalizeComparableWord(word) !== directKey).filter(
+        (word, index, values) => values.findIndex((candidate) => normalizeComparableWord(candidate) === normalizeComparableWord(word)) === index
+      ).slice(0, WORD_TARGET_SIMILAR_LIMIT);
       return {
         ...item,
         directTranslation,
