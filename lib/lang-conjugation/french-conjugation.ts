@@ -123,6 +123,8 @@ const IMPERATIVE_PRONOUNS = ["tu", "nous", "vous"] as const;
 const ELISION_PATTERN = /^[aeiouyhàâæéèêëîïôœùûü]/i;
 const SIMPLE_FRENCH_VERB_PATTERN = /^[a-zàâçéèêëîïôûùüÿæœ'-]+$/i;
 const FIRST_GROUP_ACCENT_SHIFT_PATTERN = /[eé][^aeiouy]*$/i;
+const FIRST_GROUP_SINGLE_CONSONANT_ACCENT_SHIFT_PATTERN = /[eé][^aeiouy]er$/i;
+const FIRST_GROUP_NASAL_ACCENT_BLOCK_PATTERN = /[eé][nm][^aeiouynm]er$/i;
 
 const AVOIR_FORMS = {
   conditionalPresent: ["aurais", "aurais", "aurait", "aurions", "auriez", "auraient"],
@@ -174,12 +176,27 @@ function applyGraveAccentToLastStemVowel(stem: string): string {
   );
 }
 
+function shouldApplyFirstGroupAccentShift(verb: string): boolean {
+  if (verb.endsWith("eler") || verb.endsWith("eter")) {
+    return true;
+  }
+
+  if (!FIRST_GROUP_SINGLE_CONSONANT_ACCENT_SHIFT_PATTERN.test(verb)) {
+    return false;
+  }
+
+  // Avoid over-applying the grave accent to nasal stems like "dépenser"
+  // or "inventer", which keep "e/é" in stressed forms, while limiting
+  // the shift to the classic e/é + single-consonant + er families.
+  return !FIRST_GROUP_NASAL_ACCENT_BLOCK_PATTERN.test(verb);
+}
+
 function normalizeFirstGroupFutureStem(verb: string): string {
   if (verb.endsWith("yer")) {
     return `${verb.slice(0, -3)}ier`;
   }
 
-  if (verb.endsWith("eler") || verb.endsWith("eter") || /[eé][^aeiouy]*er$/i.test(verb)) {
+  if (shouldApplyFirstGroupAccentShift(verb)) {
     return `${applyGraveAccentToLastStemVowel(verb.slice(0, -2))}er`;
   }
 

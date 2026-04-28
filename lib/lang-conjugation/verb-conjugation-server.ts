@@ -76,6 +76,14 @@ const CSV_CONFIG: Record<SupportedConjugationLanguage, CsvLanguageConfig> = {
 };
 
 const csvCache = new Map<SupportedConjugationLanguage, Map<string, VerbConjugationResult>>();
+const FRENCH_ELISION_PATTERN = /^[aeiouyhàâæéèêëîïôœùûü]/i;
+
+const FRENCH_PREFIX_IRREGULAR_FAMILIES = [
+  {
+    baseInfinitive: "prendre",
+    suffix: "prendre"
+  }
+] as const;
 
 function normalizeVerbForLookup(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ").normalize("NFC");
@@ -87,6 +95,14 @@ function replaceTrailingSuffix(value: string, suffix: string, replacement: strin
   }
 
   return `${value.slice(0, -suffix.length)}${replacement}`;
+}
+
+function normalizeFrenchCsvLabel(language: SupportedConjugationLanguage, layout: VerbConjugationLayout, label: string, form: string): string {
+  if (language !== "fr" || layout !== "personal" || label !== "je") {
+    return label;
+  }
+
+  return FRENCH_ELISION_PATTERN.test(form) ? "j'" : label;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -237,7 +253,7 @@ function buildCsvIndex(language: SupportedConjugationLanguage): Map<string, Verb
                 .sort((left, right) => left.rowOrder - right.rowOrder)
                 .map((row) => ({
                   form: row.form,
-                  label: row.label,
+                  label: normalizeFrenchCsvLabel(bucket.language, table.layout, row.label, row.form),
                   ...(row.label === "form" ? { labelKey: "conjugation.row.form" } : {})
                 }));
 
@@ -351,6 +367,84 @@ function deriveGermanSeparableIrregularResult(
   };
 }
 
+function deriveFrenchPrefixedIrregularResult(
+  infinitive: string,
+  csvIndex: Map<string, VerbConjugationResult>
+): VerbConjugationResult | null {
+  for (const family of FRENCH_PREFIX_IRREGULAR_FAMILIES) {
+    if (infinitive === family.baseInfinitive || !infinitive.endsWith(family.suffix)) {
+      continue;
+    }
+
+    const prefix = infinitive.slice(0, -family.suffix.length);
+    if (!prefix) {
+      continue;
+    }
+
+    const baseResult = csvIndex.get(family.baseInfinitive);
+    if (!baseResult || baseResult.language !== "fr") {
+      continue;
+    }
+
+    const basePastParticiple = getSingleForm(baseResult, "pastParticiple");
+    const basePresentParticiple = getSingleForm(baseResult, "presentParticiple");
+    if (!basePastParticiple || !basePresentParticiple) {
+      continue;
+    }
+
+    const derivedPastParticiple = `${prefix}${basePastParticiple}`;
+    const derivedPresentParticiple = `${prefix}${basePresentParticiple}`;
+
+    return {
+      ...baseResult,
+      infinitive,
+      sections: baseResult.sections.map((section) => ({
+        ...section,
+        tables: section.tables.map((table) => ({
+          ...table,
+          rows: table.rows.map((row) => {
+            let form = row.form;
+
+            switch (table.id) {
+              case "passeCompose":
+              case "plusQueParfait":
+              case "futurAnterieur":
+              case "subjunctivePast":
+              case "conditionalPast":
+              case "pastInfinitive":
+              case "pastGerund":
+                form = replaceTrailingSuffix(row.form, basePastParticiple, derivedPastParticiple);
+                break;
+              case "presentParticiple":
+                form = derivedPresentParticiple;
+                break;
+              case "pastParticiple":
+                form = derivedPastParticiple;
+                break;
+              case "presentInfinitive":
+                form = infinitive;
+                break;
+              case "presentGerund":
+                form = replaceTrailingSuffix(row.form, basePresentParticiple, derivedPresentParticiple);
+                break;
+              default:
+                form = `${prefix}${row.form}`;
+                break;
+            }
+
+            return {
+              ...row,
+              form
+            };
+          })
+        }))
+      }))
+    };
+  }
+
+  return null;
+}
+
 export function buildVerbConjugationResponse(
   language: SupportedConjugationLanguage,
   verbInput: string
@@ -363,6 +457,16 @@ export function buildVerbConjugationResponse(
       result: csvResult,
       status: "ok"
     };
+  }
+
+  if (language === "fr") {
+    const derivedResult = deriveFrenchPrefixedIrregularResult(normalizedVerb, csvIndex);
+    if (derivedResult) {
+      return {
+        result: derivedResult,
+        status: "ok"
+      };
+    }
   }
 
   if (language === "de") {
