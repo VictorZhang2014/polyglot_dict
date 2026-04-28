@@ -1,15 +1,17 @@
 {
   "name": "polyglot-dict",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "scripts": {
     "clean": "rm -rf .next .next-dev",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "build:lambda:translate-stream": "node scripts/build-translate-stream-lambda.mjs",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "build:lambda:translate-stream": "node scripts/build-translate-stream-lambda.mjs"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.89.0",
@@ -23,10 +25,13 @@
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.17.57",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "esbuild": "^0.28.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^5.8.3"
   }
 }
