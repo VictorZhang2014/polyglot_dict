@@ -1,4 +1,5 @@
 import type { VerbConjugationApiResponse, VerbConjugationResult, VerbConjugationRow } from "@/lib/lang-conjugation/types";
+import { getGermanVerbMetadata } from "@/lib/lang-conjugation/german-verb-metadata";
 
 export type GermanVerbGroup = "regular";
 
@@ -76,37 +77,6 @@ export const GERMAN_CONJUGATION_TENSE_ORDER: GermanConjugationTense[] = [
 const PERSONAL_PRONOUNS = ["ich", "du", "er / sie / es", "wir", "ihr", "sie / Sie"] as const;
 const IMPERATIVE_LABELS = ["du", "wir", "ihr"] as const;
 const SIMPLE_GERMAN_VERB_PATTERN = /^[a-zäöüß-]+$/i;
-const SEPARABLE_PREFIXES = [
-  "zurück",
-  "zusammen",
-  "vorbei",
-  "weiter",
-  "nieder",
-  "empor",
-  "herab",
-  "heran",
-  "hinab",
-  "hinaus",
-  "hinweg",
-  "wieder",
-  "ab",
-  "an",
-  "auf",
-  "aus",
-  "bei",
-  "ein",
-  "fest",
-  "fort",
-  "her",
-  "hin",
-  "los",
-  "mit",
-  "nach",
-  "vor",
-  "weg",
-  "zu"
-] as const;
-const INSEPARABLE_PREFIXES = ["be", "emp", "ent", "er", "ge", "miss", "ver", "zer"] as const;
 const HABEN_PRESENT = ["habe", "hast", "hat", "haben", "habt", "haben"] as const;
 const HABEN_PRETERITE = ["hatte", "hattest", "hatte", "hatten", "hattet", "hatten"] as const;
 const HABEN_SUBJUNCTIVE_I = ["habe", "habest", "habe", "haben", "habet", "haben"] as const;
@@ -128,16 +98,12 @@ function normalizeGermanVerb(value: string): string {
 }
 
 function detectGermanVerbParts(infinitive: string): GermanVerbParts {
-  const separablePrefix =
-    [...SEPARABLE_PREFIXES].sort((left, right) => right.length - left.length).find((prefix) => {
-      const bare = infinitive.slice(prefix.length);
-      return infinitive.startsWith(prefix) && bare.length > 2 && /(?:en|n)$/.test(bare);
-    }) ?? "";
+  const metadata = getGermanVerbMetadata(infinitive);
 
   return {
-    bareInfinitive: separablePrefix ? infinitive.slice(separablePrefix.length) : infinitive,
-    inseparable: INSEPARABLE_PREFIXES.some((prefix) => infinitive.startsWith(prefix)),
-    separablePrefix
+    bareInfinitive: metadata.bareInfinitive,
+    inseparable: metadata.prefixBehavior === "inseparable",
+    separablePrefix: metadata.separablePrefix
   };
 }
 
@@ -162,7 +128,7 @@ function needsEInsertion(stem: string): boolean {
     return true;
   }
 
-  return /[^aeiouäöü](m|n)$/i.test(stem) && !/(lm|rm)$/i.test(stem);
+  return /(?:chn|[^aeiouäöülrh](?:m|n))$/i.test(stem);
 }
 
 function dropsDuS(stem: string): boolean {

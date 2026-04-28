@@ -12,6 +12,7 @@ import {
   GERMAN_CONJUGATION_MOOD_ORDER,
   GERMAN_CONJUGATION_TENSE_ORDER
 } from "@/lib/lang-conjugation/german-conjugation";
+import { getGermanVerbMetadata } from "@/lib/lang-conjugation/german-verb-metadata";
 import type {
   SupportedConjugationLanguage,
   VerbConjugationApiResponse,
@@ -75,36 +76,6 @@ const CSV_CONFIG: Record<SupportedConjugationLanguage, CsvLanguageConfig> = {
 };
 
 const csvCache = new Map<SupportedConjugationLanguage, Map<string, VerbConjugationResult>>();
-const GERMAN_SEPARABLE_PREFIXES = [
-  "zurück",
-  "zusammen",
-  "vorbei",
-  "weiter",
-  "nieder",
-  "empor",
-  "herab",
-  "heran",
-  "hinab",
-  "hinaus",
-  "hinweg",
-  "wieder",
-  "ab",
-  "an",
-  "auf",
-  "aus",
-  "bei",
-  "ein",
-  "fest",
-  "fort",
-  "her",
-  "hin",
-  "los",
-  "mit",
-  "nach",
-  "vor",
-  "weg",
-  "zu"
-] as const;
 
 function normalizeVerbForLookup(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ").normalize("NFC");
@@ -307,16 +278,11 @@ function deriveGermanSeparableIrregularResult(
   csvIndex: Map<string, VerbConjugationResult>
 ): VerbConjugationResult | null {
   const normalizedVerb = normalizeVerbForLookup(infinitive);
-  const separablePrefix =
-    [...GERMAN_SEPARABLE_PREFIXES]
-      .sort((left, right) => right.length - left.length)
-      .find((prefix) => normalizedVerb.startsWith(prefix) && csvIndex.has(normalizedVerb.slice(prefix.length))) ?? "";
-
-  if (!separablePrefix) {
+  const metadata = getGermanVerbMetadata(normalizedVerb);
+  if (metadata.prefixBehavior !== "separable") {
     return null;
   }
-
-  const baseInfinitive = normalizedVerb.slice(separablePrefix.length);
+  const { bareInfinitive: baseInfinitive, separablePrefix } = metadata;
   const baseResult = csvIndex.get(baseInfinitive);
   if (!baseResult || baseResult.language !== "de") {
     return null;
