@@ -1,4 +1,4 @@
-export type SupportedConjugationLanguage = "de" | "fr";
+export type SupportedConjugationLanguage = "de" | "es" | "fr";
 
 export type VerbConjugationLayout = "personal" | "single";
 

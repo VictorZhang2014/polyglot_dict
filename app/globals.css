@@ -629,13 +629,18 @@ a {
   box-shadow: none !important;
   outline: none !important;
   overflow: hidden;
+  padding: 0 !important;
 }
 
 .conjugation-card-header {
-  margin: -16px -16px 2px;
+  margin: 0;
   padding: 12px 16px;
   border-radius: 0;
   color: #111111;
+}
+
+.conjugation-tense-card-body {
+  padding: 14px 16px 16px;
 }
 
 .conjugation-card-header-de-indicative {
@@ -666,6 +671,42 @@ a {
 .conjugation-card-header-fr-other {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.conjugation-card-header-es {
+  background: transparent;
+}
+
+.conjugation-card-header-es-indicative,
+.conjugation-card-header-es-subjunctive,
+.conjugation-card-header-es-other {
+  background: transparent;
+}
+
+.conjugation-tense-card-es:nth-child(14n + 1) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 2) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 5) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 6) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 9) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 10) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 13) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 14) .conjugation-card-header-es {
+  background: #ef4444;
+  color: #fff7f7;
+}
+
+.conjugation-tense-card-es:nth-child(14n + 3) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 4) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 11) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 12) .conjugation-card-header-es {
+  background: #facc15;
+  color: #3b2200;
+}
+
+.conjugation-tense-card-es:nth-child(14n + 7) .conjugation-card-header-es,
+.conjugation-tense-card-es:nth-child(14n + 8) .conjugation-card-header-es {
+  background: #fbcfe8;
+  color: #9d174d;
 }
 
 .conjugation-table-title {
@@ -763,12 +804,15 @@ a {
   }
 
   .conjugation-grid-two-columns .rt-Card {
-    padding: 12px;
+    padding: 0 !important;
   }
 
   .conjugation-card-header {
-    margin: -12px -12px 2px;
     padding: 10px 12px;
+  }
+
+  .conjugation-tense-card-body {
+    padding: 12px;
   }
 
   .conjugation-tense-heading {

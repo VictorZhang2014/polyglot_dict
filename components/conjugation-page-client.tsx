@@ -49,6 +49,25 @@ export function ConjugationPageClient({
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [response, setResponse] = useState<VerbConjugationApiResponse | null>(null);
+  const pendingReasonMessage = useMemo(() => {
+    if (!response || response.status !== "pending_backend") {
+      return "";
+    }
+
+    switch (response.reason) {
+      case "invalid":
+        return t("conjugation.pending.invalid");
+      case "irregular":
+        return t("conjugation.pending.irregular");
+      case "pronominal":
+        return t("conjugation.pending.pronominal");
+      case "spelling":
+        return t("conjugation.pending.spelling");
+      case "not_found":
+      default:
+        return t("conjugation.pendingBackend");
+    }
+  }, [response, t]);
 
   useEffect(() => {
     if (!normalizedWord || !sourceLanguage || !isSupported) {
@@ -160,6 +179,13 @@ export function ConjugationPageClient({
             <InfoCircledIcon />
           </Callout.Icon>
           <Callout.Text>{requestError}</Callout.Text>
+        </Callout.Root>
+      ) : pendingReasonMessage ? (
+        <Callout.Root color="gray" variant="soft">
+          <Callout.Icon>
+            <InfoCircledIcon />
+          </Callout.Icon>
+          <Callout.Text>{pendingReasonMessage}</Callout.Text>
         </Callout.Root>
       ) : loading && !response ? (
         <Flex align="center" justify="center" className="conjugation-loading-wrap">

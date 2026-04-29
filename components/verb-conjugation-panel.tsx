@@ -34,17 +34,21 @@ export function VerbConjugationPanel({
     <Flex direction="column" gap="4">
       <div className="conjugation-grid conjugation-grid-two-columns">
         {tenseBlocks.map(({ moodId, table }) => (
-          <Card size="4" key={`${moodId}:${table.id}`} className="conjugation-tense-card">
-            <Flex direction="column" gap="3">
-              <div className={getHeaderClassName(moodId)}>
-                <Text as="p" size="1" className="conjugation-mood-label">
-                  {t(moodLabelKeys[moodId])}
-                </Text>
-                <Heading size="4" className="conjugation-tense-heading">
-                  {t(tenseLabelKeys[table.id])}
-                </Heading>
-              </div>
+          <Card
+            size="4"
+            key={`${moodId}:${table.id}`}
+            className={`conjugation-tense-card conjugation-tense-card-${result.language}`}
+          >
+            <div className={getHeaderClassName(moodId)}>
+              <Text as="p" size="1" className="conjugation-mood-label">
+                {t(moodLabelKeys[moodId])}
+              </Text>
+              <Heading size="4" className="conjugation-tense-heading">
+                {t(tenseLabelKeys[table.id])}
+              </Heading>
+            </div>
 
+            <div className="conjugation-tense-card-body">
               <div className="conjugation-table-shell">
                 <table className="conjugation-table">
                   <tbody>
@@ -62,7 +66,7 @@ export function VerbConjugationPanel({
                   </tbody>
                 </table>
               </div>
-            </Flex>
+            </div>
           </Card>
         ))}
       </div>

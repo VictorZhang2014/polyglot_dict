@@ -13,6 +13,11 @@ import {
   GERMAN_CONJUGATION_TENSE_ORDER
 } from "@/lib/lang-conjugation/german-conjugation";
 import { getGermanVerbMetadata } from "@/lib/lang-conjugation/german-verb-metadata";
+import {
+  buildSpanishConjugation,
+  SPANISH_CONJUGATION_MOOD_ORDER,
+  SPANISH_CONJUGATION_TENSE_ORDER
+} from "@/lib/lang-conjugation/spanish-conjugation";
 import type {
   SupportedConjugationLanguage,
   VerbConjugationApiResponse,
@@ -72,6 +77,12 @@ const CSV_CONFIG: Record<SupportedConjugationLanguage, CsvLanguageConfig> = {
     csvPath: path.join(process.cwd(), "lib/lang-conjugation/fr_irregular_conjugations.csv"),
     moodOrder: FRENCH_CONJUGATION_MOOD_ORDER,
     tenseOrder: FRENCH_CONJUGATION_TENSE_ORDER
+  },
+  es: {
+    builder: buildSpanishConjugation,
+    csvPath: path.join(process.cwd(), "lib/lang-conjugation/es_irregular_conjugations.csv"),
+    moodOrder: SPANISH_CONJUGATION_MOOD_ORDER,
+    tenseOrder: SPANISH_CONJUGATION_TENSE_ORDER
   }
 };
 

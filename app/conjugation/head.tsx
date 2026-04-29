@@ -1,7 +1,7 @@
 import { resolveCanonical, SITE_NAME } from "@/lib/seo";
 
 const TITLE = `Verb Conjugation | ${SITE_NAME}`;
-const DESCRIPTION = "View full French verb conjugation tables generated from built-in standard rules.";
+const DESCRIPTION = "View full German, French, and Spanish verb conjugation tables generated from built-in rules and irregular data.";
 
 export default function Head() {
   return (
