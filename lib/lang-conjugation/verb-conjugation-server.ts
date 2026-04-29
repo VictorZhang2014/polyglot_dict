@@ -7,6 +7,7 @@ import {
   FRENCH_CONJUGATION_MOOD_ORDER,
   FRENCH_CONJUGATION_TENSE_ORDER
 } from "@/lib/lang-conjugation/french-conjugation";
+import { getFrenchPronominalBaseInfinitive } from "@/lib/lang-conjugation/french-verb-relations";
 import {
   buildGermanConjugation,
   GERMAN_CONJUGATION_MOOD_ORDER,
@@ -88,6 +89,26 @@ const CSV_CONFIG: Record<SupportedConjugationLanguage, CsvLanguageConfig> = {
 
 const csvCache = new Map<SupportedConjugationLanguage, Map<string, VerbConjugationResult>>();
 const FRENCH_ELISION_PATTERN = /^[aeiouyhàâæéèêëîïôœùûü]/i;
+const FRENCH_REFLEXIVE_ELISION_PATTERN = /^[aeiouyhàâæéèêëîïôœùûü]/i;
+
+const FRENCH_ETRE_FORMS = {
+  conditionalPresent: ["serais", "serais", "serait", "serions", "seriez", "seraient"],
+  futureSimple: ["serai", "seras", "sera", "serons", "serez", "seront"],
+  imperfect: ["étais", "étais", "était", "étions", "étiez", "étaient"],
+  present: ["suis", "es", "est", "sommes", "êtes", "sont"],
+  subjunctivePresent: ["sois", "sois", "soit", "soyons", "soyez", "soient"]
+} as const;
+
+const FRENCH_PRONOMINAL_PERSONAL_LABELS = [
+  { defaultLabel: "je me", elidedLabel: "je m'" },
+  { defaultLabel: "tu te", elidedLabel: "tu t'" },
+  { defaultLabel: "il / elle / on se", elidedLabel: "il / elle / on s'" },
+  { defaultLabel: "nous nous", elidedLabel: "nous nous" },
+  { defaultLabel: "vous vous", elidedLabel: "vous vous" },
+  { defaultLabel: "ils / elles se", elidedLabel: "ils / elles s'" }
+] as const;
+
+const FRENCH_PRONOMINAL_IMPERATIVE_SUFFIXES = ["toi", "nous", "vous"] as const;
 
 const FRENCH_PREFIX_IRREGULAR_FAMILIES = [
   {
@@ -300,6 +321,251 @@ function getSingleForm(result: VerbConjugationResult, tableId: string): string {
   return "";
 }
 
+function getTableRows(result: VerbConjugationResult, tableId: string): VerbConjugationRow[] {
+  for (const section of result.sections) {
+    const table = section.tables.find((entry) => entry.id === tableId);
+    if (table) {
+      return table.rows;
+    }
+  }
+
+  return [];
+}
+
+function buildFrenchPronominalLabel(index: number, nextForm: string): string {
+  const labelSet = FRENCH_PRONOMINAL_PERSONAL_LABELS[index];
+  if (!labelSet) {
+    return "";
+  }
+
+  return FRENCH_REFLEXIVE_ELISION_PATTERN.test(nextForm) ? labelSet.elidedLabel : labelSet.defaultLabel;
+}
+
+function buildFrenchPronominalStandalonePrefix(nextForm: string): string {
+  return FRENCH_REFLEXIVE_ELISION_PATTERN.test(nextForm) ? "s'" : "se ";
+}
+
+function buildFrenchPronominalRows(forms: readonly string[]): VerbConjugationRow[] {
+  return forms.map((form, index) => ({
+    form,
+    label: buildFrenchPronominalLabel(index, form)
+  }));
+}
+
+function buildFrenchPronominalImperativeRows(forms: readonly string[]): VerbConjugationRow[] {
+  return forms.map((form, index) => ({
+    form: `${form}-${FRENCH_PRONOMINAL_IMPERATIVE_SUFFIXES[index]}`,
+    label: ["tu", "nous", "vous"][index] ?? ""
+  }));
+}
+
+function deriveFrenchPronominalResult(
+  infinitive: string,
+  baseResult: VerbConjugationResult
+): VerbConjugationResult | null {
+  const presentRows = getTableRows(baseResult, "present");
+  const imperfectRows = getTableRows(baseResult, "imperfect");
+  const passeSimpleRows = getTableRows(baseResult, "passeSimple");
+  const futureSimpleRows = getTableRows(baseResult, "futureSimple");
+  const subjunctivePresentRows = getTableRows(baseResult, "subjunctivePresent");
+  const conditionalPresentRows = getTableRows(baseResult, "conditionalPresent");
+  const imperativeRows = getTableRows(baseResult, "imperativePresent");
+  const pastParticiple = getSingleForm(baseResult, "pastParticiple");
+  const presentParticiple = getSingleForm(baseResult, "presentParticiple");
+
+  if (
+    presentRows.length !== 6 ||
+    imperfectRows.length !== 6 ||
+    passeSimpleRows.length !== 6 ||
+    futureSimpleRows.length !== 6 ||
+    subjunctivePresentRows.length !== 6 ||
+    conditionalPresentRows.length !== 6 ||
+    imperativeRows.length !== 3 ||
+    !pastParticiple ||
+    !presentParticiple
+  ) {
+    return null;
+  }
+
+  const simpleForms = (rows: VerbConjugationRow[]) => rows.map((row) => row.form);
+  const compoundForms = (auxiliaryForms: readonly string[]) =>
+    auxiliaryForms.map((auxiliary, index) => `${auxiliary} ${pastParticiple}`);
+
+  const noteKeys = Array.from(
+    new Set([...baseResult.noteKeys, "conjugation.note.frenchPronominalAgreement"])
+  );
+
+  return {
+    group: baseResult.group,
+    infinitive,
+    language: "fr",
+    noteKeys,
+    sections: [
+      {
+        id: "indicative",
+        tables: [
+          {
+            id: "present",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(presentRows))
+          },
+          {
+            id: "imperfect",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(imperfectRows))
+          },
+          {
+            id: "passeCompose",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(compoundForms(FRENCH_ETRE_FORMS.present))
+          },
+          {
+            id: "plusQueParfait",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(compoundForms(FRENCH_ETRE_FORMS.imperfect))
+          },
+          {
+            id: "passeSimple",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(passeSimpleRows))
+          },
+          {
+            id: "futureSimple",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(futureSimpleRows))
+          },
+          {
+            id: "futurAnterieur",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(compoundForms(FRENCH_ETRE_FORMS.futureSimple))
+          }
+        ]
+      },
+      {
+        id: "subjunctive",
+        tables: [
+          {
+            id: "subjunctivePresent",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(subjunctivePresentRows))
+          },
+          {
+            id: "subjunctivePast",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(compoundForms(FRENCH_ETRE_FORMS.subjunctivePresent))
+          }
+        ]
+      },
+      {
+        id: "conditional",
+        tables: [
+          {
+            id: "conditionalPresent",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(simpleForms(conditionalPresentRows))
+          },
+          {
+            id: "conditionalPast",
+            layout: "personal",
+            rows: buildFrenchPronominalRows(compoundForms(FRENCH_ETRE_FORMS.conditionalPresent))
+          }
+        ]
+      },
+      {
+        id: "imperative",
+        tables: [
+          {
+            id: "imperativePresent",
+            layout: "personal",
+            rows: buildFrenchPronominalImperativeRows(simpleForms(imperativeRows))
+          }
+        ]
+      },
+      {
+        id: "participle",
+        tables: [
+          {
+            id: "presentParticiple",
+            layout: "single",
+            rows: [
+              {
+                form: `${buildFrenchPronominalStandalonePrefix(presentParticiple)}${presentParticiple}`,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          },
+          {
+            id: "pastParticiple",
+            layout: "single",
+            rows: [
+              {
+                form: pastParticiple,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: "infinitive",
+        tables: [
+          {
+            id: "presentInfinitive",
+            layout: "single",
+            rows: [
+              {
+                form: infinitive,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          },
+          {
+            id: "pastInfinitive",
+            layout: "single",
+            rows: [
+              {
+                form: `s'être ${pastParticiple}`,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: "gerund",
+        tables: [
+          {
+            id: "presentGerund",
+            layout: "single",
+            rows: [
+              {
+                form: `en ${buildFrenchPronominalStandalonePrefix(presentParticiple)}${presentParticiple}`,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          },
+          {
+            id: "pastGerund",
+            layout: "single",
+            rows: [
+              {
+                form: `en s'étant ${pastParticiple}`,
+                label: "form",
+                labelKey: "conjugation.row.form"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
 function deriveGermanSeparableIrregularResult(
   infinitive: string,
   csvIndex: Map<string, VerbConjugationResult>
@@ -456,6 +722,24 @@ function deriveFrenchPrefixedIrregularResult(
   return null;
 }
 
+function resolveFrenchBaseResult(
+  infinitive: string,
+  csvIndex: Map<string, VerbConjugationResult>
+): VerbConjugationResult | null {
+  const csvResult = csvIndex.get(infinitive);
+  if (csvResult) {
+    return csvResult;
+  }
+
+  const derivedResult = deriveFrenchPrefixedIrregularResult(infinitive, csvIndex);
+  if (derivedResult) {
+    return derivedResult;
+  }
+
+  const builtResult = buildFrenchConjugation(infinitive);
+  return builtResult.status === "ok" ? builtResult.result : null;
+}
+
 export function buildVerbConjugationResponse(
   language: SupportedConjugationLanguage,
   verbInput: string
@@ -471,6 +755,20 @@ export function buildVerbConjugationResponse(
   }
 
   if (language === "fr") {
+    const pronominalBaseInfinitive = getFrenchPronominalBaseInfinitive(normalizedVerb);
+    if (pronominalBaseInfinitive) {
+      const baseResult = resolveFrenchBaseResult(pronominalBaseInfinitive, csvIndex);
+      if (baseResult) {
+        const pronominalResult = deriveFrenchPronominalResult(normalizedVerb, baseResult);
+        if (pronominalResult) {
+          return {
+            result: pronominalResult,
+            status: "ok"
+          };
+        }
+      }
+    }
+
     const derivedResult = deriveFrenchPrefixedIrregularResult(normalizedVerb, csvIndex);
     if (derivedResult) {
       return {

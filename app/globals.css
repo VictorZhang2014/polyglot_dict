@@ -610,6 +610,37 @@ a {
   bottom: 0;
 }
 
+.conjugation-related-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.conjugation-related-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--app-link-strong) 18%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 90%, var(--app-link-strong) 10%);
+  color: var(--app-link-strong);
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.conjugation-related-chip:hover {
+  background: color-mix(in srgb, var(--app-surface) 82%, var(--app-link-strong) 18%);
+}
+
+.conjugation-related-chip.is-active {
+  border-color: transparent;
+  background: #fbcfe8;
+  color: #9d174d;
+}
+
 .conjugation-note {
   color: var(--app-hint);
   line-height: 1.45;
@@ -786,6 +817,11 @@ a {
 
   .conjugation-page-header-left {
     gap: 8px;
+  }
+
+  .conjugation-related-chip {
+    min-height: 32px;
+    font-size: 13px;
   }
 
   .conjugation-float-button {

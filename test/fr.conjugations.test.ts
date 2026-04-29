@@ -406,6 +406,120 @@ const REGULAR_VERBS: string[] = [
   'signaler', 'siffler', 'soigner', 'tirer', 'toucher',
 ];
 
+const PRONOMINAL_SENTIR_EXPECTED: VerbForms = {
+  present: {
+    'je me': 'sens',
+    'tu te': 'sens',
+    'il / elle / on se': 'sent',
+    'nous nous': 'sentons',
+    'vous vous': 'sentez',
+    'ils / elles se': 'sentent',
+  },
+  imperfect: {
+    'je me': 'sentais',
+    'tu te': 'sentais',
+    'il / elle / on se': 'sentait',
+    'nous nous': 'sentions',
+    'vous vous': 'sentiez',
+    'ils / elles se': 'sentaient',
+  },
+  passeCompose: {
+    'je me': 'suis senti',
+    'tu t\'': 'es senti',
+    'il / elle / on s\'': 'est senti',
+    'nous nous': 'sommes senti',
+    'vous vous': 'êtes senti',
+    'ils / elles se': 'sont senti',
+  },
+  plusQueParfait: {
+    'je m\'': 'étais senti',
+    'tu t\'': 'étais senti',
+    'il / elle / on s\'': 'était senti',
+    'nous nous': 'étions senti',
+    'vous vous': 'étiez senti',
+    'ils / elles s\'': 'étaient senti',
+  },
+  passeSimple: {
+    'je me': 'sentis',
+    'tu te': 'sentis',
+    'il / elle / on se': 'sentit',
+    'nous nous': 'sentîmes',
+    'vous vous': 'sentîtes',
+    'ils / elles se': 'sentirent',
+  },
+  futureSimple: {
+    'je me': 'sentirai',
+    'tu te': 'sentiras',
+    'il / elle / on se': 'sentira',
+    'nous nous': 'sentirons',
+    'vous vous': 'sentirez',
+    'ils / elles se': 'sentiront',
+  },
+  futurAnterieur: {
+    'je me': 'serai senti',
+    'tu te': 'seras senti',
+    'il / elle / on se': 'sera senti',
+    'nous nous': 'serons senti',
+    'vous vous': 'serez senti',
+    'ils / elles se': 'seront senti',
+  },
+  subjunctivePresent: {
+    'je me': 'sente',
+    'tu te': 'sentes',
+    'il / elle / on se': 'sente',
+    'nous nous': 'sentions',
+    'vous vous': 'sentiez',
+    'ils / elles se': 'sentent',
+  },
+  subjunctivePast: {
+    'je me': 'sois senti',
+    'tu te': 'sois senti',
+    'il / elle / on se': 'soit senti',
+    'nous nous': 'soyons senti',
+    'vous vous': 'soyez senti',
+    'ils / elles se': 'soient senti',
+  },
+  conditionalPresent: {
+    'je me': 'sentirais',
+    'tu te': 'sentirais',
+    'il / elle / on se': 'sentirait',
+    'nous nous': 'sentirions',
+    'vous vous': 'sentiriez',
+    'ils / elles se': 'sentiraient',
+  },
+  conditionalPast: {
+    'je me': 'serais senti',
+    'tu te': 'serais senti',
+    'il / elle / on se': 'serait senti',
+    'nous nous': 'serions senti',
+    'vous vous': 'seriez senti',
+    'ils / elles se': 'seraient senti',
+  },
+  imperativePresent: {
+    'tu': 'sens-toi',
+    'nous': 'sentons-nous',
+    'vous': 'sentez-vous',
+  },
+  presentParticiple: {
+    'form': 'se sentant',
+  },
+  pastParticiple: {
+    'form': 'senti',
+  },
+  presentInfinitive: {
+    'form': 'se sentir',
+  },
+  pastInfinitive: {
+    'form': "s'être senti",
+  },
+  presentGerund: {
+    'form': 'en se sentant',
+  },
+  pastGerund: {
+    'form': "en s'étant senti",
+  },
+};
+
 // Sanity guard
 (() => {
   if (IRREGULAR_VERBS.length !== 20) {
@@ -456,6 +570,16 @@ describe('French verb conjugation API', () => {
       const expected = buildRegularExpected(verb);
       assertConjugationMatches(verb, expected, actual);
       expect(result.group).toBe('first');
+    }, REQUEST_TIMEOUT_MS);
+  });
+
+  describe('linked pronominal entries', () => {
+    test('conjugates "se sentir" as a separate linked entry', async () => {
+      const result = await fetchConjugation('se sentir');
+      const actual = flattenApiResult(result);
+      assertConjugationMatches('se sentir', PRONOMINAL_SENTIR_EXPECTED, actual);
+      expect(result.group).toBe('third');
+      expect(result.noteKeys).toContain('conjugation.note.frenchPronominalAgreement');
     }, REQUEST_TIMEOUT_MS);
   });
 });

@@ -30,12 +30,18 @@ const CONJUGATION_LANGUAGE_LABELS: Record<string, string> = {
 
 const CONTACT_EMAIL = "contact@parlerai.app";
 
+function normalizeConjugationEntry(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ").normalize("NFC");
+}
+
 type ConjugationPageClientProps = {
+  relatedEntries: string[];
   sourceWord: string;
   sourceLanguage: string;
 };
 
 export function ConjugationPageClient({
+  relatedEntries,
   sourceWord,
   sourceLanguage
 }: ConjugationPageClientProps) {
@@ -46,6 +52,11 @@ export function ConjugationPageClient({
     ? CONJUGATION_LANGUAGE_LABELS[sourceLanguage] ?? languageName.replace(/\s*\(.+\)\s*$/, "")
     : "";
   const normalizedWord = useMemo(() => sourceWord.trim(), [sourceWord]);
+  const normalizedWordKey = useMemo(() => normalizeConjugationEntry(sourceWord), [sourceWord]);
+  const normalizedRelatedEntries = useMemo(
+    () => relatedEntries.map((entry) => entry.trim()).filter(Boolean),
+    [relatedEntries]
+  );
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [response, setResponse] = useState<VerbConjugationApiResponse | null>(null);
@@ -155,6 +166,26 @@ export function ConjugationPageClient({
             </a>
           </IconButton>
         </div>
+
+        {normalizedRelatedEntries.length > 1 ? (
+          <div className="conjugation-related-switch" aria-label={t("conjugation.relatedEntries")}>
+            {normalizedRelatedEntries.map((entry) => {
+              const isActive = normalizeConjugationEntry(entry) === normalizedWordKey;
+              const href = `/conjugation?q=${encodeURIComponent(entry)}&code=${encodeURIComponent(sourceLanguage)}`;
+
+              return (
+                <Link
+                  key={entry}
+                  href={href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`conjugation-related-chip${isActive ? " is-active" : ""}`}
+                >
+                  {entry}
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </Box>
 
       {!sourceWord || !sourceLanguage ? (
